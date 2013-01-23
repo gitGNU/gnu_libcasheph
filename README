@@ -21,4 +21,23 @@ was started specifically for developing a Ben NanoNote application for
 managing GnuCash files but could be used for other purposes.
 
 Dependencies:
+ a C compiler
  zlib
+
+To configure, type
+
+  ./configure
+
+Then, to build, type
+
+  make
+
+To test, type
+
+  make check
+
+To install, type
+
+  make install
+
+as root.
