@@ -18,5 +18,9 @@
 SUBDIRS = \
  src
 
+dist_noinst_DATA = \
+ test.gnucash \
+ test2.gnucash
+
 check:
 	src/test
