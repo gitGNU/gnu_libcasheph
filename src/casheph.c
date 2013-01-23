@@ -1,0 +1,477 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdbool.h>
+
+#include "casheph.h"
+
+void
+move_to_end_of_tag (gzFile file)
+{
+  char c;
+  do
+    {
+      gzread (file, &c, 1);
+    }
+  while (c != '>');
+}
+
+char
+move_to_end_of_tag_name (gzFile file)
+{
+  char c;
+  do
+    {
+      gzread (file, &c, 1);
+    }
+  while (c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '>');
+  return c;
+}
+
+casheph_attribute_t *
+casheph_parse_attribute (gzFile file)
+{
+  int c;
+  do
+    {
+      c = gzgetc (file);
+    }
+  while (c != -1 && (c == ' ' || c == '\t' || c == '\n' || c == '\r'));
+  if (c == -1)
+    {
+      return NULL;
+    }
+  char *name = (char*)malloc (256);
+  char *cur = name;
+  do
+    {
+      *cur = c;
+      cur++;
+      *cur = '\0';
+      c = gzgetc (file);
+    }
+  while (c != -1 && c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '=');
+
+  casheph_attribute_t *att = (casheph_attribute_t*)malloc (sizeof (casheph_attribute_t));
+  att->key = (char*)malloc (cur - name + 1);
+  strcpy (att->key, name);
+
+  if (c != '=')
+    {
+      do
+        {
+          c = gzgetc (file);
+        }
+      while (c != -1 && (c == ' ' || c == '\t' || c == '\n' || c == '\r'));
+      if (c != '=')
+        {
+          free (name);
+          free (att->key);
+          free (att);
+          return NULL;
+        }
+    }
+
+  do
+    {
+      c = gzgetc (file);
+    }
+  while (c != -1 && (c == ' ' || c == '\t' || c == '\n' || c == '\r'));
+
+  if (c == -1)
+    {
+      return NULL;
+    }
+  cur = name;
+  if (c == '\"')
+    {
+      do
+        {
+          *cur = c;
+          cur++;
+          *cur = '\0';
+          c = gzgetc (file);
+        }
+      while (c != -1 && c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '\"');
+    }
+  else if (c == '\'')
+    {
+      do
+        {
+          *cur = c;
+          cur++;
+          *cur = '\0';
+          c = gzgetc (file);
+        }
+      while (c != -1 && c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '\'');
+    }
+
+  att->val = (char*)malloc (cur - name);
+  strcpy (att->val, name + 1);
+  free (name);
+  return att;
+}
+
+casheph_tag_t *
+casheph_parse_tag (gzFile file)
+{
+  int c;
+  do
+    {
+      c = gzgetc (file);
+    }
+  while (c != -1 && (c == ' ' || c == '\t' || c == '\n' || c == '\r'));
+  if (c == -1)
+    {
+      return NULL;
+    }
+  if (c != '<')
+    {
+      return NULL;
+    }
+  char *name = (char*)malloc (256);
+  char *cur = name;
+  do
+    {
+      *cur = c;
+      cur++;
+      *cur = '\0';
+      c = gzgetc (file);
+    }
+  while (c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '>');
+  casheph_tag_t *tag = (casheph_tag_t*)malloc (sizeof (casheph_tag_t));
+  tag->name = (char*)malloc (cur - name);
+  strcpy (tag->name, name + 1);
+  free (name);
+  if (strcmp (tag->name, "!--") == 0)
+    {
+      free (tag->name);
+      free (tag);
+      return NULL;
+    }
+  tag->n_attributes = 0;
+  tag->attributes = NULL;
+  while (c != '>')
+    {
+      ++tag->n_attributes;
+      tag->attributes = (casheph_attribute_t**)realloc (tag->attributes, tag->n_attributes * sizeof (casheph_attribute_t*));
+      tag->attributes[tag->n_attributes - 1] = casheph_parse_attribute (file);
+      c = gzgetc (file);
+    }
+  return tag;
+}
+
+void
+casheph_tag_destroy (casheph_tag_t *tag)
+{
+  if (tag == NULL)
+    {
+      return;
+    }
+  int i;
+  for (i = 0; i < tag->n_attributes; ++i)
+    {
+      free (tag->attributes[i]->key);
+      free (tag->attributes[i]->val);
+      free (tag->attributes[i]);
+    }
+  free (tag->attributes);
+  free (tag->name);
+  free (tag);
+}
+
+void
+casheph_skip_text (gzFile file)
+{
+  int c = gzgetc (file);
+  while (c != -1 && c != '<')
+    {
+      c = gzgetc (file);
+    }
+  if (c == '<')
+    {
+      int d = gzgetc (file);
+      gzungetc (d, file);
+      gzungetc ('<', file);
+    }
+}
+
+char *
+casheph_parse_text (gzFile file)
+{
+  char *name = malloc (256);
+  char *cur = name;
+  int c = gzgetc (file);
+  while (c != -1 && c != '<')
+    {
+      *cur = c;
+      ++cur;
+      c = gzgetc (file);
+    }
+  *cur = '\0';
+  if (c == '<')
+    {
+      gzungetc ('<', file);
+    }
+  return name;
+}
+
+#define casheph_handle_tag(obj,tagname,endtagname,propname,file) else if (strcmp (tag->name, tagname) == 0) \
+    {                                                                   \
+      obj->propname = casheph_parse_text (file);                        \
+      tag = casheph_parse_tag (file);                                   \
+      if (strcmp (tag->name, endtagname) != 0)                          \
+        {                                                               \
+          fprintf (stderr, "Couldn't find matching <%s>\n", endtagname); \
+          exit (1);                                                     \
+        }                                                               \
+    }
+
+casheph_account_t *
+parse_account_contents (gzFile file)
+{
+  casheph_account_t *account = (casheph_account_t*)malloc (sizeof (casheph_account_t));
+  account->name = NULL;
+  account->type = NULL;
+  account->accounts = NULL;
+  account->n_accounts = 0;
+  account->id = NULL;
+  account->parent = NULL;
+  casheph_tag_t *tag = casheph_parse_tag (file);
+  while (strcmp (tag->name, "/gnc:account") != 0)
+    {
+      if (0);
+      casheph_handle_tag (account,"act:name", "/act:name", name, file)
+        casheph_handle_tag (account,"act:type", "/act:type", type, file)
+        casheph_handle_tag (account,"act:id", "/act:id", id, file)
+        casheph_handle_tag (account,"act:parent", "/act:parent", parent, file)
+      else
+        {
+          char *target_tag2_name = (char*)malloc (strlen (tag->name) + 2);
+          sprintf (target_tag2_name, "/%s", tag->name);
+          casheph_skip_text (file);
+          casheph_tag_t *tag2 = casheph_parse_tag (file);
+          while (strcmp (tag2->name, target_tag2_name) != 0)
+            {
+              casheph_skip_text (file);
+              casheph_tag_destroy (tag2);
+              tag2 = casheph_parse_tag (file);
+            }
+          casheph_tag_destroy (tag2);
+          free (target_tag2_name);
+        }
+      casheph_tag_destroy (tag);
+      tag = casheph_parse_tag (file);
+    }
+  casheph_tag_destroy (tag);
+  return account;
+}
+
+casheph_account_t *
+casheph_account_get_account_by_name (casheph_account_t *act,
+                                     const char *name)
+{
+  int i;
+  for (i = 0; i < act->n_accounts; ++i)
+    {
+      if (strcmp (act->accounts[i]->name, name) == 0)
+        {
+          return act->accounts[i];
+        }
+    }
+  return NULL;
+}
+
+casheph_transaction_t *
+casheph_get_transaction (casheph_t *ce,
+                         const char *id)
+{
+  int i;
+  for (i = 0; i < ce->n_transactions; ++i)
+    {
+      if (strcmp (ce->transactions[i]->id, id) == 0)
+        {
+          return ce->transactions[i];
+        }
+    }
+  return NULL;
+}
+
+void
+casheph_account_collect_accounts (casheph_account_t *act,
+                                  size_t n_accounts,
+                                  casheph_account_t **accounts)
+{
+  int i;
+  for (i = 0; i < n_accounts; ++i)
+    {
+      if (accounts[i]->parent != NULL && strncmp (accounts[i]->parent, act->id, 32) == 0)
+        {
+          casheph_account_collect_accounts (accounts[i], n_accounts, accounts);
+          ++act->n_accounts;
+          act->accounts = (casheph_account_t**)realloc (act->accounts,
+                                                        sizeof (casheph_account_t*) * act->n_accounts);
+          act->accounts[act->n_accounts - 1] = accounts[i];
+        }
+    }
+}
+
+casheph_transaction_t *
+casheph_parse_trn_contents (gzFile file)
+{
+  casheph_transaction_t *trn = (casheph_transaction_t*)malloc (sizeof (casheph_transaction_t));
+  trn->id = NULL;
+  casheph_tag_t *tag = casheph_parse_tag (file);
+  while (strcmp (tag->name, "/gnc:transaction") != 0)
+    {
+      if (0);
+      casheph_handle_tag (trn,"trn:id", "/trn:id", id, file)
+      casheph_handle_tag (trn,"trn:description", "/trn:description", desc, file)
+      else if (strcmp (tag->name, "trn:date-posted") == 0)
+        {
+          casheph_tag_t *date_tag = casheph_parse_tag (file);
+          if (strcmp (date_tag->name, "ts:date") != 0)
+            {
+              fprintf (stderr, "No ts:date found\n");
+            }
+          char date_posted_str[25];
+          if (gzread (file, date_posted_str, 25) < 25)
+            {
+              fprintf (stderr, "Couldn't read expected 25 bytes of date\n");
+            }
+          else
+            {
+              casheph_tag_destroy (date_tag);
+              date_tag = casheph_parse_tag (file);
+              if (strcmp (date_tag->name, "/ts:date") != 0)
+                {
+                  fprintf (stderr, "Couldn't find matching </ts:date>\n");
+                }
+              casheph_tag_destroy (date_tag);
+              tzset ();
+              struct tm tm;
+              memset (&tm, 0, sizeof (struct tm));
+              strptime (date_posted_str, "%Y-%m-%d %H:%M:%S", &tm);
+              trn->date_posted = mktime (&tm);
+              trn->date_posted += tm.tm_gmtoff;
+              int minutes_to_add = date_posted_str[24] - '0'
+                + (date_posted_str[23] - '0') * 10
+                + (date_posted_str[22] - '0') * 60
+                + (date_posted_str[21] - '0') * 600;
+              int seconds_to_add = minutes_to_add * 60;
+              if (date_posted_str[20] == '+')
+                {
+                  seconds_to_add *= -1;
+                }
+              trn->date_posted += seconds_to_add;
+              casheph_tag_destroy (tag);
+              tag = casheph_parse_tag (file);
+              if (strcmp (tag->name, "/trn:date-posted") != 0)
+                {
+                  fprintf (stderr, "Couldn't find matching </trn:date-posted>\n");
+                  exit (1);
+                }
+            }
+        }
+      else
+        {
+          char *target_tag2_name = (char*)malloc (strlen (tag->name) + 2);
+          sprintf (target_tag2_name, "/%s", tag->name);
+          casheph_skip_text (file);
+          casheph_tag_t *tag2 = casheph_parse_tag (file);
+          while (strcmp (tag2->name, target_tag2_name) != 0)
+            {
+              casheph_skip_text (file);
+              casheph_tag_destroy (tag2);
+              tag2 = casheph_parse_tag (file);
+            }
+          casheph_tag_destroy (tag2);
+          free (target_tag2_name);
+        }
+      casheph_tag_destroy (tag);
+      tag = casheph_parse_tag (file);
+    }
+  casheph_tag_destroy (tag);
+  return trn;
+}
+
+void
+parse_template_transactions (gzFile file)
+{
+  casheph_tag_t *tag = casheph_parse_tag (file);
+  while (strcmp (tag->name, "/gnc:template-transactions") != 0)
+    {
+      if (strcmp (tag->name, "gnc:account") == 0)
+        {
+          casheph_account_t *act = parse_account_contents (file);
+        }
+      else if (strcmp (tag->name, "gnc:transaction") == 0)
+        {
+          casheph_transaction_t *trn = casheph_parse_trn_contents (file);
+        }
+      casheph_tag_destroy (tag);
+      tag = casheph_parse_tag (file);
+    }
+  casheph_tag_destroy (tag);
+}
+
+casheph_t *
+casheph_open (const char *filename)
+{
+  gzFile file = gzopen (filename, "r");
+  if (file == NULL)
+    {
+      return NULL;
+    }
+  char buf[40];
+  int res = gzread (file, buf, 40);
+  if (res != 40)
+    {
+      gzclose (file);
+      return NULL;
+    }
+  if (strncmp (buf, "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n", 40) != 0)
+    {
+      gzclose (file);
+      return NULL;
+    }
+  casheph_t *ce = (casheph_t*)malloc (sizeof (casheph_t));
+  ce->n_transactions = 0;
+  ce->transactions = NULL;
+  int n_accounts = 0;
+  casheph_account_t **accounts = NULL;
+  while (!gzeof (file))
+    {
+      casheph_skip_text (file);
+      casheph_tag_t *tag = casheph_parse_tag (file);
+      if (tag != NULL && strcmp (tag->name, "gnc:account") == 0)
+        {
+          casheph_account_t *act = parse_account_contents (file);
+          ++n_accounts;
+          accounts = (casheph_account_t**)realloc (accounts, sizeof (casheph_account_t*) * n_accounts);
+          accounts[n_accounts - 1] = act;
+          if (strcmp (act->type, "ROOT") == 0)
+            {
+              char id[33];
+              id[32] = '\0';
+              strncpy (id, act->id, 32);
+              ce->root = act;
+            }
+        }
+      else if (tag != NULL && strcmp (tag->name, "gnc:transaction") == 0)
+        {
+          ++ce->n_transactions;
+          casheph_transaction_t *trn = casheph_parse_trn_contents (file);
+          ce->transactions = (casheph_transaction_t**)realloc (ce->transactions, sizeof (casheph_transaction_t*) * ce->n_transactions);
+          ce->transactions[ce->n_transactions - 1] = trn;
+        }
+      else if (tag != NULL && strcmp (tag->name, "gnc:template-transactions") == 0)
+        {
+          parse_template_transactions (file);
+        }
+      casheph_tag_destroy (tag);
+    }
+  casheph_account_collect_accounts (ce->root, n_accounts, accounts);
+  gzclose (file);
+  return ce;
+}
