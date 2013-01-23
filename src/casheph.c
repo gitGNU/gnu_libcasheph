@@ -207,8 +207,6 @@ casheph_skip_text (gzFile file)
     }
   if (c == '<')
     {
-      int d = gzgetc (file);
-      gzungetc (d, file);
       gzungetc ('<', file);
     }
 }
