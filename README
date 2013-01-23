@@ -41,3 +41,7 @@ To install, type
   make install
 
 as root.
+
+To bootstrap, type
+
+  autoreconf -if
