@@ -279,7 +279,7 @@ casheph_parse_simple_complete_tag (char **dest, casheph_tag_t **tag, const char 
 void
 casheph_skip_any_tag (casheph_tag_t **tag, gzFile file)
 {
-  if ((*tag)->name[0] != '/')
+  if (*tag != NULL && (*tag)->name[0] != '/')
     {
       char *endtagname = (char*)malloc (strlen ((*tag)->name) + 2);
       sprintf (endtagname, "/%s", (*tag)->name);
@@ -474,20 +474,7 @@ casheph_parse_trn_contents (gzFile file)
                 }
             }
         }
-      if (tag != NULL && tag->name[0] != '/')
-        {
-          char *target_tag2_name = (char*)malloc (strlen (tag->name) + 2);
-          sprintf (target_tag2_name, "/%s", tag->name);
-          casheph_skip_text (file);
-          casheph_tag_t *tag2 = casheph_parse_tag (file);
-          while (strcmp (tag2->name, target_tag2_name) != 0)
-            {
-              casheph_skip_text (file);
-              casheph_tag_destroy (tag2);
-              tag2 = casheph_parse_tag (file);
-            }
-          free (target_tag2_name);
-        }
+      casheph_skip_any_tag (&tag, file);
       casheph_tag_destroy (tag);
       tag = casheph_parse_tag (file);
     }
