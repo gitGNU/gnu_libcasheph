@@ -291,7 +291,6 @@ casheph_skip_any_tag (casheph_tag_t **tag, gzFile file)
           casheph_tag_destroy (tag2);
           tag2 = casheph_parse_tag (file);
         }
-      casheph_tag_destroy (tag2);
       free (endtagname);
     }
 }
@@ -380,10 +379,9 @@ casheph_parse_trn_contents (gzFile file)
   casheph_tag_t *tag = casheph_parse_tag (file);
   while (strcmp (tag->name, "/gnc:transaction") != 0)
     {
-      if (0);
-      casheph_handle_tag (trn,"trn:id", "/trn:id", id, file)
-        casheph_handle_tag (trn,"trn:description", "/trn:description", desc, file)
-      else if (strcmp (tag->name, "trn:splits") == 0)
+      casheph_parse_simple_complete_tag (&(trn->id), &tag, "trn:id", file);
+      casheph_parse_simple_complete_tag (&(trn->desc), &tag, "trn:description", file);
+      if (strcmp (tag->name, "trn:splits") == 0)
         {
           casheph_tag_t *split_tag = casheph_parse_tag (file);
           while (strcmp (split_tag->name, "trn:split") == 0)
@@ -427,8 +425,10 @@ casheph_parse_trn_contents (gzFile file)
             {
               fprintf (stderr, "Couldn't find matching </trn:splits>\n");
             }
+          casheph_tag_destroy (tag);
+          tag = NULL;
         }
-      else if (strcmp (tag->name, "trn:date-posted") == 0)
+      if (tag != NULL && strcmp (tag->name, "trn:date-posted") == 0)
         {
           casheph_tag_t *date_tag = casheph_parse_tag (file);
           if (strcmp (date_tag->name, "ts:date") != 0)
@@ -474,7 +474,7 @@ casheph_parse_trn_contents (gzFile file)
                 }
             }
         }
-      else
+      if (tag != NULL && tag->name[0] != '/')
         {
           char *target_tag2_name = (char*)malloc (strlen (tag->name) + 2);
           sprintf (target_tag2_name, "/%s", tag->name);
@@ -486,7 +486,6 @@ casheph_parse_trn_contents (gzFile file)
               casheph_tag_destroy (tag2);
               tag2 = casheph_parse_tag (file);
             }
-          casheph_tag_destroy (tag2);
           free (target_tag2_name);
         }
       casheph_tag_destroy (tag);
