@@ -396,16 +396,16 @@ casheph_parse_trn_contents (gzFile file)
               split_tag = casheph_parse_tag (file);
               while (strcmp (split_tag->name, "/trn:split") != 0)
                 {
-                  if (0);
-                  casheph_handle_tag_2 (split_tag, split, "split:id", "/split:id", id, file)
-                    casheph_handle_tag_2 (split_tag, split, "split:reconciled-state", "/split:reconciled-state", reconciled_state, file)
-                    casheph_handle_tag_2 (split_tag, split, "split:account", "/split:account", account, file)
-                  else if (strcmp (split_tag->name, "split:value") == 0)
+                  casheph_parse_simple_complete_tag (&(split->id), &split_tag, "split:id", file);
+                  casheph_parse_simple_complete_tag (&(split->reconciled_state), &split_tag, "split:reconciled_state", file);
+                  casheph_parse_simple_complete_tag (&(split->account), &split_tag, "split:account", file);
+                  if (strcmp (split_tag->name, "split:value") == 0)
                     {
                       char *buf = casheph_parse_text (file);
                       long val;
                       sscanf (buf, "%ld", &val);
                       split->value = val;
+                      casheph_tag_destroy (split_tag);
                       split_tag = casheph_parse_tag (file);
                       if (strcmp (split_tag->name, "/split:value") != 0)
                         {
@@ -413,21 +413,7 @@ casheph_parse_trn_contents (gzFile file)
                           exit (1);
                         }
                     }
-                  else
-                    {
-                      char *target_split_tag_2_name = (char*)malloc (strlen (split_tag->name) + 2);
-                      sprintf (target_split_tag_2_name, "/%s", split_tag->name);
-                      casheph_skip_text (file);
-                      casheph_tag_t *split_tag_2 = casheph_parse_tag (file);
-                      while (strcmp (split_tag_2->name, target_split_tag_2_name) != 0)
-                        {
-                          casheph_skip_text (file);
-                          casheph_tag_destroy (split_tag_2);
-                          split_tag_2 = casheph_parse_tag (file);
-                        }
-                      casheph_tag_destroy (split_tag_2);
-                      free (target_split_tag_2_name);
-                    }
+                  casheph_skip_any_tag (&split_tag, file);
                   casheph_tag_destroy (split_tag);
                   split_tag = casheph_parse_tag (file);
                 }
