@@ -242,6 +242,17 @@ casheph_parse_text (gzFile file)
         }                                                               \
     }
 
+#define casheph_handle_tag_2(tag,obj,tagname,endtagname,propname,file) else if (strcmp (tag->name, tagname) == 0) \
+    {                                                                   \
+      obj->propname = casheph_parse_text (file);                        \
+      tag = casheph_parse_tag (file);                                   \
+      if (strcmp (tag->name, endtagname) != 0)                          \
+        {                                                               \
+          fprintf (stderr, "Couldn't find matching <%s>\n", endtagname); \
+          exit (1);                                                     \
+        }                                                               \
+    }
+
 casheph_account_t *
 parse_account_contents (gzFile file)
 {
@@ -335,13 +346,74 @@ casheph_transaction_t *
 casheph_parse_trn_contents (gzFile file)
 {
   casheph_transaction_t *trn = (casheph_transaction_t*)malloc (sizeof (casheph_transaction_t));
+  trn->n_splits = 0;
+  trn->splits = NULL;
   trn->id = NULL;
   casheph_tag_t *tag = casheph_parse_tag (file);
   while (strcmp (tag->name, "/gnc:transaction") != 0)
     {
       if (0);
       casheph_handle_tag (trn,"trn:id", "/trn:id", id, file)
-      casheph_handle_tag (trn,"trn:description", "/trn:description", desc, file)
+        casheph_handle_tag (trn,"trn:description", "/trn:description", desc, file)
+      else if (strcmp (tag->name, "trn:splits") == 0)
+        {
+          casheph_tag_t *split_tag = casheph_parse_tag (file);
+          while (strcmp (split_tag->name, "trn:split") == 0)
+            {
+              casheph_split_t *split = (casheph_split_t*)malloc (sizeof (casheph_split_t));
+              split->id = NULL;
+              split->reconciled_state = NULL;
+              split->account = NULL;
+              split->value = 0;
+              split_tag = casheph_parse_tag (file);
+              while (strcmp (split_tag->name, "/trn:split") != 0)
+                {
+                  if (0);
+                  casheph_handle_tag_2 (split_tag, split, "split:id", "/split:id", id, file)
+                    casheph_handle_tag_2 (split_tag, split, "split:reconciled-state", "/split:reconciled-state", reconciled_state, file)
+                    casheph_handle_tag_2 (split_tag, split, "split:account", "/split:account", account, file)
+                  else if (strcmp (split_tag->name, "split:value") == 0)
+                    {
+                      char *buf = casheph_parse_text (file);
+                      long val;
+                      sscanf (buf, "%ld", &val);
+                      split->value = val;
+                      split_tag = casheph_parse_tag (file);
+                      if (strcmp (split_tag->name, "/split:value") != 0)
+                        {
+                          fprintf (stderr, "Couldn't find matching </split:value>\n");
+                          exit (1);
+                        }
+                    }
+                  else
+                    {
+                      char *target_split_tag_2_name = (char*)malloc (strlen (split_tag->name) + 2);
+                      sprintf (target_split_tag_2_name, "/%s", split_tag->name);
+                      casheph_skip_text (file);
+                      casheph_tag_t *split_tag_2 = casheph_parse_tag (file);
+                      while (strcmp (split_tag_2->name, target_split_tag_2_name) != 0)
+                        {
+                          casheph_skip_text (file);
+                          casheph_tag_destroy (split_tag_2);
+                          split_tag_2 = casheph_parse_tag (file);
+                        }
+                      casheph_tag_destroy (split_tag_2);
+                      free (target_split_tag_2_name);
+                    }
+                  casheph_tag_destroy (split_tag);
+                  split_tag = casheph_parse_tag (file);
+                }
+              ++trn->n_splits;
+              trn->splits = (casheph_split_t**)realloc (trn->splits, sizeof (casheph_split_t*) * trn->n_splits);
+              trn->splits[trn->n_splits - 1] = split;
+              casheph_tag_destroy (split_tag);
+              split_tag = casheph_parse_tag (file);
+            }
+          if (strcmp (split_tag->name, "/trn:splits") != 0)
+            {
+              fprintf (stderr, "Couldn't find matching </trn:splits>\n");
+            }
+        }
       else if (strcmp (tag->name, "trn:date-posted") == 0)
         {
           casheph_tag_t *date_tag = casheph_parse_tag (file);
@@ -489,4 +561,20 @@ casheph_open (const char *filename)
   casheph_account_collect_accounts (ce->root, n_accounts, accounts);
   gzclose (file);
   return ce;
+}
+
+long
+casheph_trn_value_for_act (casheph_transaction_t *trn, casheph_account_t *act)
+{
+  long val = 0;
+  int i;
+  for (i = 0; i < trn->n_splits; ++i)
+    {
+      if (strcmp (trn->splits[i]->account, act->id) == 0)
+        {
+          val = trn->splits[i]->value;
+          break;
+        }
+    }
+  return val;
 }

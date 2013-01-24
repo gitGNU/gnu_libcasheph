@@ -356,6 +356,52 @@ transaction_date_posted_2 ()
   return true;
 }
 
+bool
+transaction_values_for_checking ()
+{
+  casheph_t *ce = casheph_open ("test.gnucash");
+  if (ce->n_transactions != 5)
+    {
+      return false;
+    }
+  // Get the checking account
+  casheph_account_t *root = ce->root;
+  casheph_account_t *assets;
+  assets = casheph_account_get_account_by_name (root, "Assets");
+  casheph_account_t *cur_assets;
+  cur_assets = casheph_account_get_account_by_name (assets, "Current Assets");
+  casheph_account_t *checking;
+  checking = casheph_account_get_account_by_name (cur_assets, "Checking Account");
+
+  casheph_transaction_t *t;
+  t = casheph_get_transaction (ce, "b83f85a497dfb3f1d8db4c26489f57d9");
+  if (casheph_trn_value_for_act (t, checking) != 20000)
+    {
+      return false;
+    }
+  t = casheph_get_transaction (ce, "75fe0a336df6675568885a8cd7c582a8");
+  if (casheph_trn_value_for_act (t, checking) != -3214)
+    {
+      return false;
+    }
+  t = casheph_get_transaction (ce, "26d5b26ad0b23fd822f2c63a6e1084e0");
+  if (casheph_trn_value_for_act (t, checking) != -4823)
+    {
+      return false;
+    }
+  t = casheph_get_transaction (ce, "b1bac36e34d568e6363a81f2f61af197");
+  if (casheph_trn_value_for_act (t, checking) != 500279)
+    {
+      return false;
+    }
+  t = casheph_get_transaction (ce, "2205e761a5c5abbc66f34be4e212e457");
+  if (casheph_trn_value_for_act (t, checking) != -312766)
+    {
+      return false;
+    }
+  return true;
+}
+
 #define CE_TEST(r, f, s) r = r && test (f, s)
 
 int
@@ -392,5 +438,7 @@ main (int argc, char *argv[])
            "The transactions have the correct posted dates [test.gnucash]");
   CE_TEST (res, transaction_date_posted_2,
            "The transactions have the correct posted dates [test2.gnucash]");
+  CE_TEST (res, transaction_values_for_checking,
+           "The transactions have the correct values for checking [test.gnucash]");
   return res?0:1;
 }

@@ -54,7 +54,7 @@ struct casheph_transaction_s
   time_t date_entered;
   char *desc;
   int n_splits;
-  casheph_split_t *splits;
+  casheph_split_t **splits;
 };
 
 struct casheph_split_s
@@ -95,5 +95,7 @@ casheph_account_t *casheph_account_get_account_by_name (casheph_account_t *act,
 
 casheph_transaction_t *casheph_get_transaction (casheph_t *ce,
                                                 const char *id);
+
+long casheph_trn_value_for_act (casheph_transaction_t *t, casheph_account_t *act);
 
 #endif
