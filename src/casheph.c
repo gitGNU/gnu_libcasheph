@@ -234,6 +234,7 @@ casheph_parse_text (gzFile file)
 #define casheph_handle_tag(obj,tagname,endtagname,propname,file) else if (strcmp (tag->name, tagname) == 0) \
     {                                                                   \
       obj->propname = casheph_parse_text (file);                        \
+      casheph_tag_destroy (tag);                                        \
       tag = casheph_parse_tag (file);                                   \
       if (strcmp (tag->name, endtagname) != 0)                          \
         {                                                               \
@@ -245,6 +246,7 @@ casheph_parse_text (gzFile file)
 #define casheph_handle_tag_2(tag,obj,tagname,endtagname,propname,file) else if (strcmp (tag->name, tagname) == 0) \
     {                                                                   \
       obj->propname = casheph_parse_text (file);                        \
+      casheph_tag_destroy (tag);                                        \
       tag = casheph_parse_tag (file);                                   \
       if (strcmp (tag->name, endtagname) != 0)                          \
         {                                                               \
@@ -252,6 +254,47 @@ casheph_parse_text (gzFile file)
           exit (1);                                                     \
         }                                                               \
     }
+
+void
+casheph_parse_simple_complete_tag (char **dest, casheph_tag_t **tag, const char *name, gzFile file)
+{
+  char *val = NULL;
+  char *endtagname = (char*)malloc (strlen (name) + 2);
+  endtagname[0] = '/';
+  strcpy (endtagname + 1, name);
+  if (strcmp ((*tag)->name, name) == 0)
+    {
+      *dest = casheph_parse_text (file);
+      casheph_tag_destroy (*tag);
+      *tag = casheph_parse_tag (file);
+      if (strcmp ((*tag)->name, endtagname) != 0)
+        {
+          fprintf (stderr, "Couldn't find matching <%s>\n", endtagname);
+          exit (1);
+        }
+    }
+  free (endtagname);
+}
+
+void
+casheph_skip_any_tag (casheph_tag_t **tag, gzFile file)
+{
+  if ((*tag)->name[0] != '/')
+    {
+      char *endtagname = (char*)malloc (strlen ((*tag)->name) + 2);
+      sprintf (endtagname, "/%s", (*tag)->name);
+      casheph_skip_text (file);
+      casheph_tag_t *tag2 = casheph_parse_tag (file);
+      while (strcmp (tag2->name, endtagname) != 0)
+        {
+          casheph_skip_text (file);
+          casheph_tag_destroy (tag2);
+          tag2 = casheph_parse_tag (file);
+        }
+      casheph_tag_destroy (tag2);
+      free (endtagname);
+    }
+}
 
 casheph_account_t *
 parse_account_contents (gzFile file)
@@ -266,26 +309,11 @@ parse_account_contents (gzFile file)
   casheph_tag_t *tag = casheph_parse_tag (file);
   while (strcmp (tag->name, "/gnc:account") != 0)
     {
-      if (0);
-      casheph_handle_tag (account,"act:name", "/act:name", name, file)
-        casheph_handle_tag (account,"act:type", "/act:type", type, file)
-        casheph_handle_tag (account,"act:id", "/act:id", id, file)
-        casheph_handle_tag (account,"act:parent", "/act:parent", parent, file)
-      else
-        {
-          char *target_tag2_name = (char*)malloc (strlen (tag->name) + 2);
-          sprintf (target_tag2_name, "/%s", tag->name);
-          casheph_skip_text (file);
-          casheph_tag_t *tag2 = casheph_parse_tag (file);
-          while (strcmp (tag2->name, target_tag2_name) != 0)
-            {
-              casheph_skip_text (file);
-              casheph_tag_destroy (tag2);
-              tag2 = casheph_parse_tag (file);
-            }
-          casheph_tag_destroy (tag2);
-          free (target_tag2_name);
-        }
+      casheph_parse_simple_complete_tag (&(account->name), &tag, "act:name", file);
+      casheph_parse_simple_complete_tag (&(account->type), &tag, "act:type", file);
+      casheph_parse_simple_complete_tag (&(account->id), &tag, "act:id", file);
+      casheph_parse_simple_complete_tag (&(account->parent), &tag, "act:parent", file);
+      casheph_skip_any_tag (&tag, file);
       casheph_tag_destroy (tag);
       tag = casheph_parse_tag (file);
     }
