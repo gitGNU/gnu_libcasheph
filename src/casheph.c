@@ -22,15 +22,21 @@
 
 #include "casheph.h"
 
+void
+casheph_consume_whitespace (int *c, gzFile file)
+{
+  do
+    {
+      *c = gzgetc (file);
+    }
+  while (*c != -1 && (*c == ' ' || *c == '\t' || *c == '\n' || *c == '\r'));
+}
+
 casheph_attribute_t *
 casheph_parse_attribute (gzFile file)
 {
   int c;
-  do
-    {
-      c = gzgetc (file);
-    }
-  while (c != -1 && (c == ' ' || c == '\t' || c == '\n' || c == '\r'));
+  casheph_consume_whitespace (&c, file);
   if (c == -1)
     {
       return NULL;
@@ -52,11 +58,7 @@ casheph_parse_attribute (gzFile file)
 
   if (c != '=')
     {
-      do
-        {
-          c = gzgetc (file);
-        }
-      while (c != -1 && (c == ' ' || c == '\t' || c == '\n' || c == '\r'));
+      casheph_consume_whitespace (&c, file);
       if (c != '=')
         {
           free (name);
@@ -65,13 +67,7 @@ casheph_parse_attribute (gzFile file)
           return NULL;
         }
     }
-
-  do
-    {
-      c = gzgetc (file);
-    }
-  while (c != -1 && (c == ' ' || c == '\t' || c == '\n' || c == '\r'));
-
+  casheph_consume_whitespace (&c, file);
   if (c == -1)
     {
       return NULL;
