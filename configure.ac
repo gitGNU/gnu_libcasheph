@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with libcasheph.  If not, see <http://www.gnu.org/licenses/>.
 
-AC_INIT([libcasheph],[0.0.2],[hutchiep190@potsdam.edu])
+AC_INIT([libcasheph],[0.0.3],[hutchiep190@potsdam.edu])
 
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 
