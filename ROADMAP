@@ -1,0 +1,48 @@
+  Copyright (C) 2013 Eric P. Hutchins
+
+  This file is part of libcasheph.
+
+  libcasheph is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  libcasheph is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with libcasheph.  If not, see <http://www.gnu.org/licenses/>.
+
+Roadmap
+-------
+
+0.1.0
+-----
+
+- Save an opened GnuCash file back so that it matches what was read (a
+  bit for bit match)
+
+- Function for adding a transaction
+
+- Function for removing a transaction (by ID)
+
+0.2.0
+-----
+
+- Function for adding an account
+
+- Function for removing an account (by ID)
+
+0.3.0
+-----
+
+- Functions for getting any template transactions that should be applied
+
+- Functions for adding transactions by template
+
+0.4.0
+-----
+
+- ???
