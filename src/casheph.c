@@ -548,9 +548,6 @@ casheph_open (const char *filename)
           accounts[n_accounts - 1] = act;
           if (strcmp (act->type, "ROOT") == 0)
             {
-              char id[33];
-              id[32] = '\0';
-              strncpy (id, act->id, 32);
               ce->root = act;
             }
         }
