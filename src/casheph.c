@@ -405,6 +405,31 @@ casheph_parse_split_contents (gzFile file)
   return split;
 }
 
+void
+casheph_parse_splits (casheph_split_t ***splits, int *n_splits, casheph_tag_t **tag, gzFile file)
+{
+  if (strcmp ((*tag)->name, "trn:splits") == 0)
+    {
+      *n_splits = 0;
+      casheph_tag_t *split_tag = casheph_parse_tag (file);
+      while (strcmp (split_tag->name, "trn:split") == 0)
+        {
+          casheph_split_t *split = casheph_parse_split_contents (file);
+          ++(*n_splits);
+          (*splits) = (casheph_split_t**)realloc ((*splits), sizeof (casheph_split_t*) * (*n_splits));
+          (*splits)[(*n_splits) - 1] = split;
+          casheph_tag_destroy (split_tag);
+          split_tag = casheph_parse_tag (file);
+        }
+      if (strcmp (split_tag->name, "/trn:splits") != 0)
+        {
+          fprintf (stderr, "Couldn't find matching </trn:splits>\n");
+        }
+      casheph_tag_destroy (*tag);
+      *tag = NULL;
+    }
+}
+
 casheph_transaction_t *
 casheph_parse_trn_contents (gzFile file)
 {
@@ -417,25 +442,7 @@ casheph_parse_trn_contents (gzFile file)
     {
       casheph_parse_simple_complete_tag (&(trn->id), &tag, "trn:id", file);
       casheph_parse_simple_complete_tag (&(trn->desc), &tag, "trn:description", file);
-      if (strcmp (tag->name, "trn:splits") == 0)
-        {
-          casheph_tag_t *split_tag = casheph_parse_tag (file);
-          while (strcmp (split_tag->name, "trn:split") == 0)
-            {
-              casheph_split_t *split = casheph_parse_split_contents (file);
-              ++trn->n_splits;
-              trn->splits = (casheph_split_t**)realloc (trn->splits, sizeof (casheph_split_t*) * trn->n_splits);
-              trn->splits[trn->n_splits - 1] = split;
-              casheph_tag_destroy (split_tag);
-              split_tag = casheph_parse_tag (file);
-            }
-          if (strcmp (split_tag->name, "/trn:splits") != 0)
-            {
-              fprintf (stderr, "Couldn't find matching </trn:splits>\n");
-            }
-          casheph_tag_destroy (tag);
-          tag = NULL;
-        }
+      casheph_parse_splits (&(trn->splits), &(trn->n_splits), &tag, file);
       if (tag != NULL && strcmp (tag->name, "trn:date-posted") == 0)
         {
           casheph_tag_t *date_tag = casheph_parse_tag (file);
