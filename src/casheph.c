@@ -33,18 +33,6 @@ move_to_end_of_tag (gzFile file)
   while (c != '>');
 }
 
-char
-move_to_end_of_tag_name (gzFile file)
-{
-  char c;
-  do
-    {
-      gzread (file, &c, 1);
-    }
-  while (c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '>');
-  return c;
-}
-
 casheph_attribute_t *
 casheph_parse_attribute (gzFile file)
 {
