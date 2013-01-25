@@ -231,30 +231,6 @@ casheph_parse_text (gzFile file)
   return name;
 }
 
-#define casheph_handle_tag(obj,tagname,endtagname,propname,file) else if (strcmp (tag->name, tagname) == 0) \
-    {                                                                   \
-      obj->propname = casheph_parse_text (file);                        \
-      casheph_tag_destroy (tag);                                        \
-      tag = casheph_parse_tag (file);                                   \
-      if (strcmp (tag->name, endtagname) != 0)                          \
-        {                                                               \
-          fprintf (stderr, "Couldn't find matching <%s>\n", endtagname); \
-          exit (1);                                                     \
-        }                                                               \
-    }
-
-#define casheph_handle_tag_2(tag,obj,tagname,endtagname,propname,file) else if (strcmp (tag->name, tagname) == 0) \
-    {                                                                   \
-      obj->propname = casheph_parse_text (file);                        \
-      casheph_tag_destroy (tag);                                        \
-      tag = casheph_parse_tag (file);                                   \
-      if (strcmp (tag->name, endtagname) != 0)                          \
-        {                                                               \
-          fprintf (stderr, "Couldn't find matching <%s>\n", endtagname); \
-          exit (1);                                                     \
-        }                                                               \
-    }
-
 void
 casheph_parse_simple_complete_tag (char **dest, casheph_tag_t **tag, const char *name, gzFile file)
 {
