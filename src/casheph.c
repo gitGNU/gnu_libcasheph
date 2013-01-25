@@ -203,22 +203,27 @@ casheph_parse_text (gzFile file)
 void
 casheph_parse_simple_complete_tag (char **dest, casheph_tag_t **tag, const char *name, gzFile file)
 {
-  char *val = NULL;
-  char *endtagname = (char*)malloc (strlen (name) + 2);
-  endtagname[0] = '/';
-  strcpy (endtagname + 1, name);
-  if (strcmp ((*tag)->name, name) == 0)
+  if (*tag != NULL)
     {
-      *dest = casheph_parse_text (file);
-      casheph_tag_destroy (*tag);
-      *tag = casheph_parse_tag (file);
-      if (strcmp ((*tag)->name, endtagname) != 0)
+      char *val = NULL;
+      char *endtagname = (char*)malloc (strlen (name) + 2);
+      endtagname[0] = '/';
+      strcpy (endtagname + 1, name);
+      if (strcmp ((*tag)->name, name) == 0)
         {
-          fprintf (stderr, "Couldn't find matching <%s>\n", endtagname);
-          exit (1);
+          *dest = casheph_parse_text (file);
+          casheph_tag_destroy (*tag);
+          *tag = casheph_parse_tag (file);
+          if (strcmp ((*tag)->name, endtagname) != 0)
+            {
+              fprintf (stderr, "Couldn't find matching <%s>\n", endtagname);
+              exit (1);
+            }
+          casheph_tag_destroy (*tag);
+          *tag = NULL;
         }
+      free (endtagname);
     }
-  free (endtagname);
 }
 
 void
@@ -258,7 +263,6 @@ parse_account_contents (gzFile file)
       casheph_parse_simple_complete_tag (&(account->id), &tag, "act:id", file);
       casheph_parse_simple_complete_tag (&(account->parent), &tag, "act:parent", file);
       casheph_skip_any_tag (&tag, file);
-      casheph_tag_destroy (tag);
       tag = casheph_parse_tag (file);
     }
   casheph_tag_destroy (tag);
@@ -328,7 +332,7 @@ casheph_parse_split_contents (gzFile file)
       casheph_parse_simple_complete_tag (&(split->id), &split_tag, "split:id", file);
       casheph_parse_simple_complete_tag (&(split->reconciled_state), &split_tag, "split:reconciled_state", file);
       casheph_parse_simple_complete_tag (&(split->account), &split_tag, "split:account", file);
-      if (strcmp (split_tag->name, "split:value") == 0)
+      if (split_tag != NULL && strcmp (split_tag->name, "split:value") == 0)
         {
           char *buf = casheph_parse_text (file);
           long val;
@@ -343,7 +347,6 @@ casheph_parse_split_contents (gzFile file)
             }
         }
       casheph_skip_any_tag (&split_tag, file);
-      casheph_tag_destroy (split_tag);
       split_tag = casheph_parse_tag (file);
     }
   casheph_tag_destroy (split_tag);
@@ -353,7 +356,7 @@ casheph_parse_split_contents (gzFile file)
 void
 casheph_parse_splits (casheph_split_t ***splits, int *n_splits, casheph_tag_t **tag, gzFile file)
 {
-  if (strcmp ((*tag)->name, "trn:splits") == 0)
+  if (*tag != NULL && strcmp ((*tag)->name, "trn:splits") == 0)
     {
       *n_splits = 0;
       casheph_tag_t *split_tag = casheph_parse_tag (file);
@@ -423,6 +426,8 @@ casheph_parse_date_posted (time_t *date_posted, casheph_tag_t **tag, gzFile file
               exit (1);
             }
         }
+      casheph_tag_destroy (*tag);
+      *tag = NULL;
     }
 }
 
@@ -441,7 +446,6 @@ casheph_parse_trn_contents (gzFile file)
       casheph_parse_splits (&(trn->splits), &(trn->n_splits), &tag, file);
       casheph_parse_date_posted (&(trn->date_posted), &tag, file);
       casheph_skip_any_tag (&tag, file);
-      casheph_tag_destroy (tag);
       tag = casheph_parse_tag (file);
     }
   casheph_tag_destroy (tag);
