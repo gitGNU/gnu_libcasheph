@@ -502,6 +502,22 @@ parse_template_transactions (gzFile file)
   casheph_tag_destroy (tag);
 }
 
+int
+casheph_get_xml_declaration (gzFile file)
+{
+  char buf[40];
+  int res = gzread (file, buf, 40);
+  if (res != 40)
+    {
+      return -1;
+    }
+  if (strncmp (buf, "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n", 40) != 0)
+    {
+      return -1;
+    }
+  return 0;
+}
+
 casheph_t *
 casheph_open (const char *filename)
 {
@@ -510,14 +526,7 @@ casheph_open (const char *filename)
     {
       return NULL;
     }
-  char buf[40];
-  int res = gzread (file, buf, 40);
-  if (res != 40)
-    {
-      gzclose (file);
-      return NULL;
-    }
-  if (strncmp (buf, "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n", 40) != 0)
+  if (casheph_get_xml_declaration (file) == -1)
     {
       gzclose (file);
       return NULL;
