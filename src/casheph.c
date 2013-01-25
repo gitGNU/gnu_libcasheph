@@ -422,7 +422,7 @@ casheph_parse_trn_contents (gzFile file)
           casheph_tag_t *split_tag = casheph_parse_tag (file);
           while (strcmp (split_tag->name, "trn:split") == 0)
             {
-              casheph_split_t *split = casheph_parse_split_contents (gzFile file);
+              casheph_split_t *split = casheph_parse_split_contents (file);
               ++trn->n_splits;
               trn->splits = (casheph_split_t**)realloc (trn->splits, sizeof (casheph_split_t*) * trn->n_splits);
               trn->splits[trn->n_splits - 1] = split;
