@@ -106,11 +106,7 @@ casheph_tag_t *
 casheph_parse_tag (gzFile file)
 {
   int c;
-  do
-    {
-      c = gzgetc (file);
-    }
-  while (c != -1 && (c == ' ' || c == '\t' || c == '\n' || c == '\r'));
+  casheph_consume_whitespace (&c, file);
   if (c == -1)
     {
       return NULL;
