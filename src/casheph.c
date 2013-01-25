@@ -488,6 +488,17 @@ casheph_get_xml_declaration (gzFile file)
   return 0;
 }
 
+void
+casheph_parse_account (casheph_tag_t **tag, casheph_account_t **act, gzFile file)
+{
+  if (*tag != NULL && strcmp ((*tag)->name, "gnc:account") == 0)
+    {
+      *act = parse_account_contents (file);
+      casheph_tag_destroy (*tag);
+      *tag = NULL;
+    }
+}
+
 casheph_t *
 casheph_open (const char *filename)
 {
@@ -510,26 +521,31 @@ casheph_open (const char *filename)
     {
       casheph_skip_text (file);
       casheph_tag_t *tag = casheph_parse_tag (file);
-      if (tag != NULL && strcmp (tag->name, "gnc:account") == 0)
+      casheph_account_t *account = NULL;
+      casheph_parse_account (&tag, &account, file);
+      if (account != NULL)
         {
-          casheph_account_t *act = parse_account_contents (file);
           ++n_accounts;
           accounts = (casheph_account_t**)realloc (accounts, sizeof (casheph_account_t*) * n_accounts);
-          accounts[n_accounts - 1] = act;
-          if (strcmp (act->type, "ROOT") == 0)
+          accounts[n_accounts - 1] = account;
+          if (strcmp (account->type, "ROOT") == 0)
             {
-              ce->root = act;
+              ce->root = account;
             }
         }
-      else if (tag != NULL && strcmp (tag->name, "gnc:transaction") == 0)
+      if (tag != NULL && strcmp (tag->name, "gnc:transaction") == 0)
         {
+          casheph_tag_destroy (tag);
+          tag = NULL;
           ++ce->n_transactions;
           casheph_transaction_t *trn = casheph_parse_trn_contents (file);
           ce->transactions = (casheph_transaction_t**)realloc (ce->transactions, sizeof (casheph_transaction_t*) * ce->n_transactions);
           ce->transactions[ce->n_transactions - 1] = trn;
         }
-      else if (tag != NULL && strcmp (tag->name, "gnc:template-transactions") == 0)
+      if (tag != NULL && strcmp (tag->name, "gnc:template-transactions") == 0)
         {
+          casheph_tag_destroy (tag);
+          tag = NULL;
           parse_template_transactions (file);
         }
       casheph_tag_destroy (tag);
