@@ -22,17 +22,6 @@
 
 #include "casheph.h"
 
-void
-move_to_end_of_tag (gzFile file)
-{
-  char c;
-  do
-    {
-      gzread (file, &c, 1);
-    }
-  while (c != '>');
-}
-
 casheph_attribute_t *
 casheph_parse_attribute (gzFile file)
 {
