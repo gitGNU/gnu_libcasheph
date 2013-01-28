@@ -60,7 +60,8 @@ opening_gives_null_when_no_xml_dec ()
   fprintf (file, "This is not an XML declaration... %s",
            "but it is more than forty characters...\n");
   fclose (file);
-  system ("gzip -fS .gnucash noxmldec");
+  system ("gzip -f noxmldec");
+  system ("mv noxmldec.gz noxmldec.gnucash");
   casheph_t *ce = casheph_open ("noxmldec.gnucash");
   system ("rm noxmldec.gnucash");
   return ce == NULL;
@@ -72,7 +73,8 @@ parsing_simple_tag ()
   FILE *file = fopen ("tagparse", "w");
   fprintf (file, " \t\n <foo>\t  \n");
   fclose (file);
-  system ("gzip -fS .gnucash tagparse");
+  system ("gzip -f tagparse");
+  system ("mv tagparse.gz tagparse.gnucash");
   gzFile g_file = gzopen ("tagparse.gnucash", "r");
   casheph_tag_t *tag = casheph_parse_tag (g_file);
   gzclose (g_file);
@@ -86,7 +88,8 @@ parsing_simple_tags ()
   FILE *file = fopen ("tagparse", "w");
   fprintf (file, " \t\n <foo>\t <bar>\r <blah>\t \n  <hello> \n");
   fclose (file);
-  system ("gzip -fS .gnucash tagparse");
+  system ("gzip -f tagparse");
+  system ("mv tagparse.gz tagparse.gnucash");
   gzFile g_file = gzopen ("tagparse.gnucash", "r");
   casheph_tag_t *tag = casheph_parse_tag (g_file);
   if (tag == NULL || strcmp (tag->name, "foo") != 0)
@@ -128,7 +131,8 @@ parsing_tag_with_attributes ()
            "blah",
            "blah2");
   fclose (file);
-  system ("gzip -fS .gnucash tagparse");
+  system ("gzip -f tagparse");
+  system ("mv tagparse.gz tagparse.gnucash");
   gzFile g_file = gzopen ("tagparse.gnucash", "r");
   casheph_tag_t *tag = casheph_parse_tag (g_file);
   gzclose (g_file);
@@ -152,7 +156,8 @@ parsing_attribute ()
   FILE *file = fopen ("attparse", "w");
   fprintf (file, " \t\n foo=\"bar\"\t  \r\n hello \t =\n 'world'>\t\n");
   fclose (file);
-  system ("gzip -fS .gnucash attparse");
+  system ("gzip -f attparse");
+  system ("mv attparse.gz attparse.gnucash");
   gzFile g_file = gzopen ("attparse.gnucash", "r");
   casheph_attribute_t *att = casheph_parse_attribute (g_file);
   if (att == NULL
