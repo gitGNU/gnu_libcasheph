@@ -529,6 +529,7 @@ bool
 saving_produces_file_with_same_content ()
 {
   casheph_t *ce = casheph_open ("test.gnucash");
+  setenv ("TZ", "UTC+0", 1);
   casheph_save (ce, "test.gnucash.saved");
   system ("gunzip -c test.gnucash > test.gnucash.raw");
   system ("gunzip -c test.gnucash.saved > test.gnucash.saved.raw");
@@ -536,6 +537,21 @@ saving_produces_file_with_same_content ()
   system ("rm test.gnucash.saved");
   system ("rm test.gnucash.raw");
   system ("rm test.gnucash.saved.raw");
+  return res == 0;
+}
+
+bool
+saving_produces_file_with_same_content_2 ()
+{
+  casheph_t *ce = casheph_open ("test2.gnucash");
+  setenv ("TZ", "EST+5", 1);
+  casheph_save (ce, "test2.gnucash.saved");
+  system ("gunzip -c test2.gnucash > test2.gnucash.raw");
+  system ("gunzip -c test2.gnucash.saved > test2.gnucash.saved.raw");
+  int res = system ("diff test2.gnucash.raw test2.gnucash.saved.raw > test2.gnucash.saved.diff");
+  system ("rm test2.gnucash.saved");
+  system ("rm test2.gnucash.raw");
+  system ("rm test2.gnucash.saved.raw");
   return res == 0;
 }
 
@@ -585,5 +601,7 @@ main (int argc, char *argv[])
            "The book id is correct [test.gnucash]");
   CE_TEST (res, saving_produces_file_with_same_content,
            "Saving produces a file with the same content [test.gnucash]");
+  CE_TEST (res, saving_produces_file_with_same_content_2,
+           "Saving produces a file with the same content [test2.gnucash]");
   return res?0:1;
 }

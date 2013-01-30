@@ -756,15 +756,22 @@ casheph_write_transaction (casheph_transaction_t *trn, gzFile file)
   gzprintf (file, "    <cmdty:id>USD</cmdty:id>\n");
   gzprintf (file, "  </trn:currency>\n");
   gzprintf (file, "  <trn:date-posted>\n");
-  struct tm *tm = gmtime (&trn->date_posted);
+  struct tm *tm = localtime (&trn->date_posted);
+  int hrs_off = timezone / 3600;
+  int mins_off = (timezone / 60) % 60;
+  char sign = '+';
+  if (timezone > 0)
+    {
+      sign = '-';
+    }
   char buf[1024];
-  strftime (buf, 1024, "%Y-%m-%d %H:%M:%S +0000", tm);
-  gzprintf (file, "    <ts:date>%s</ts:date>\n", buf);
+  strftime (buf, 1024, "%Y-%m-%d %H:%M:%S", tm);
+  gzprintf (file, "    <ts:date>%s %c%02d%02d</ts:date>\n", buf, sign, hrs_off, mins_off);
   gzprintf (file, "  </trn:date-posted>\n");
   gzprintf (file, "  <trn:date-entered>\n");
-  tm = gmtime (&trn->date_entered);
-  strftime (buf, 1024, "%Y-%m-%d %H:%M:%S +0000", tm);
-  gzprintf (file, "    <ts:date>%s</ts:date>\n", buf);
+  tm = localtime (&trn->date_entered);
+  strftime (buf, 1024, "%Y-%m-%d %H:%M:%S", tm);
+  gzprintf (file, "    <ts:date>%s %c%02d%02d</ts:date>\n", buf, sign, hrs_off, mins_off);
   gzprintf (file, "  </trn:date-entered>\n");
   gzprintf (file, "  <trn:description>%s</trn:description>\n", trn->desc);
   if (trn->n_slots > 0)
