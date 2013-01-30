@@ -30,6 +30,12 @@ typedef struct casheph_transaction_s casheph_transaction_t;
 
 typedef struct casheph_split_s casheph_split_t;
 
+typedef struct casheph_slot_s casheph_slot_t;
+
+typedef enum { gdate } casheph_slot_type_t;
+
+typedef struct casheph_gdate_s casheph_gdate_t;
+
 struct casheph_s
 {
   casheph_account_t *root;
@@ -55,6 +61,8 @@ struct casheph_transaction_s
   char *desc;
   int n_splits;
   casheph_split_t **splits;
+  int n_slots;
+  casheph_slot_t **slots;
 };
 
 struct casheph_split_s
@@ -63,6 +71,20 @@ struct casheph_split_s
   char *reconciled_state;
   long value;
   char *account;
+};
+
+struct casheph_slot_s
+{
+  char *key;
+  casheph_slot_type_t type;
+  void *value;
+};
+
+struct casheph_gdate_s
+{
+  unsigned int year;
+  unsigned int month;
+  unsigned int day;
 };
 
 casheph_t *casheph_open (const char *filename);

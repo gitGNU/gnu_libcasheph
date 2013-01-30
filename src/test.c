@@ -444,6 +444,76 @@ transaction_values_for_checking ()
   return true;
 }
 
+bool
+has_one_slot_with_date_value (casheph_transaction_t *t, unsigned int year,
+                              unsigned int month, unsigned int day)
+{
+  if (t->n_slots != 1)
+    {
+      return false;
+    }
+  if (strcmp (t->slots[0]->key, "date-posted") != 0)
+    {
+      return false;
+    }
+  if (t->slots[0]->type != gdate)
+    {
+      return false;
+    }
+  casheph_gdate_t *date = (casheph_gdate_t*)t->slots[0]->value;
+  if (date->year != year || date->month != month || date->day != day)
+    {
+      return false;
+    }
+  return true;
+}
+
+bool
+transaction_slots ()
+{
+  casheph_t *ce = casheph_open ("test.gnucash");
+  if (ce->n_transactions != 5)
+    {
+      return false;
+    }
+  // Get the checking account
+  casheph_account_t *root = ce->root;
+  casheph_account_t *assets;
+  assets = casheph_account_get_account_by_name (root, "Assets");
+  casheph_account_t *cur_assets;
+  cur_assets = casheph_account_get_account_by_name (assets, "Current Assets");
+  casheph_account_t *checking;
+  checking = casheph_account_get_account_by_name (cur_assets, "Checking Account");
+
+  casheph_transaction_t *t;
+  t = casheph_get_transaction (ce, "b83f85a497dfb3f1d8db4c26489f57d9");
+  if (t->n_slots != 0)
+    {
+      return false;
+    }
+  t = casheph_get_transaction (ce, "75fe0a336df6675568885a8cd7c582a8");
+  if (!has_one_slot_with_date_value (t, 2012, 12, 4))
+    {
+      return false;
+    }
+  t = casheph_get_transaction (ce, "26d5b26ad0b23fd822f2c63a6e1084e0");
+  if (!has_one_slot_with_date_value (t, 2012, 12, 5))
+    {
+      return false;
+    }
+  t = casheph_get_transaction (ce, "b1bac36e34d568e6363a81f2f61af197");
+  if (!has_one_slot_with_date_value (t, 2012, 12, 6))
+    {
+      return false;
+    }
+  t = casheph_get_transaction (ce, "2205e761a5c5abbc66f34be4e212e457");
+  if (!has_one_slot_with_date_value (t, 2012, 12, 7))
+    {
+      return false;
+    }
+  return true;
+}
+
 #define CE_TEST(r, f, s) r = r && test (f, s)
 
 int
@@ -484,5 +554,7 @@ main (int argc, char *argv[])
            "The transactions have the correct values for checking [test.gnucash]");
   CE_TEST (res, transaction_date_entered,
            "The transactions have the correct entered dates [test.gnucash]");
+  CE_TEST (res, transaction_slots,
+           "The transactions have the correct slots [test.gnucash]");
   return res?0:1;
 }
