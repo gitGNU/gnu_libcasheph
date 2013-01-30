@@ -49,9 +49,12 @@ struct casheph_account_s
   char *id;
   char *type;
   char *name;
+  char *description;
   int n_accounts;
   casheph_account_t **accounts;
   char *parent;
+  int n_slots;
+  casheph_slot_t **slots;
 };
 
 struct casheph_transaction_s
@@ -120,5 +123,7 @@ casheph_transaction_t *casheph_get_transaction (casheph_t *ce,
                                                 const char *id);
 
 long casheph_trn_value_for_act (casheph_transaction_t *t, casheph_account_t *act);
+
+void casheph_save (casheph_t *ce, const char *filename);
 
 #endif

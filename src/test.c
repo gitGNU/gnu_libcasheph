@@ -525,6 +525,20 @@ book_id_is_correct ()
   return true;
 }
 
+bool
+saving_produces_file_with_same_content ()
+{
+  casheph_t *ce = casheph_open ("test.gnucash");
+  casheph_save (ce, "test.gnucash.saved");
+  system ("gunzip -c test.gnucash > test.gnucash.raw");
+  system ("gunzip -c test.gnucash.saved > test.gnucash.saved.raw");
+  int res = system ("diff test.gnucash.raw test.gnucash.saved.raw > test.gnucash.saved.diff");
+  system ("rm test.gnucash.saved");
+  system ("rm test.gnucash.raw");
+  system ("rm test.gnucash.saved.raw");
+  return res == 0;
+}
+
 #define CE_TEST(r, f, s) r = r && test (f, s)
 
 int
@@ -569,5 +583,7 @@ main (int argc, char *argv[])
            "The transactions have the correct slots [test.gnucash]");
   CE_TEST (res, book_id_is_correct,
            "The book id is correct [test.gnucash]");
+  CE_TEST (res, saving_produces_file_with_same_content,
+           "Saving produces a file with the same content [test.gnucash]");
   return res?0:1;
 }
