@@ -20,6 +20,9 @@ written in C. It's purpose is to be lightweight and test-driven. It
 was started specifically for developing a Ben NanoNote application for
 managing GnuCash files but could be used for other purposes.
 
+Note that currently libcasheph only supports gnucash files with one
+book and using USD for all accounts/transactions/etc.
+
 Dependencies:
  a C compiler
  zlib
