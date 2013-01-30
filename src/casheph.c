@@ -621,6 +621,7 @@ casheph_open (const char *filename)
       casheph_skip_text (file);
       casheph_tag_t *tag = casheph_parse_tag (file);
       casheph_account_t *account = NULL;
+      casheph_parse_simple_complete_tag (&(ce->book_id), &tag, "book:id", file);
       casheph_parse_account (&tag, &account, file);
       if (account != NULL)
         {

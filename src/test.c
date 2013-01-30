@@ -514,6 +514,17 @@ transaction_slots ()
   return true;
 }
 
+bool
+book_id_is_correct ()
+{
+  casheph_t *ce = casheph_open ("test.gnucash");
+  if (strcmp (ce->book_id, "12cec244a8dd6053ebb1d461bec78f37") != 0)
+    {
+      return false;
+    }
+  return true;
+}
+
 #define CE_TEST(r, f, s) r = r && test (f, s)
 
 int
@@ -556,5 +567,7 @@ main (int argc, char *argv[])
            "The transactions have the correct entered dates [test.gnucash]");
   CE_TEST (res, transaction_slots,
            "The transactions have the correct slots [test.gnucash]");
+  CE_TEST (res, book_id_is_correct,
+           "The book id is correct [test.gnucash]");
   return res?0:1;
 }
