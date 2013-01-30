@@ -324,6 +324,43 @@ transaction_date_posted ()
 }
 
 bool
+transaction_date_entered ()
+{
+  casheph_t *ce = casheph_open ("test.gnucash");
+  if (ce->n_transactions != 5)
+    {
+      return false;
+    }
+  casheph_transaction_t *t;
+  t = casheph_get_transaction (ce, "b83f85a497dfb3f1d8db4c26489f57d9");
+  if (t->date_entered != 1354552859)
+    {
+      return false;
+    }
+  t = casheph_get_transaction (ce, "75fe0a336df6675568885a8cd7c582a8");
+  if (t->date_entered != 1354553000)
+    {
+      return false;
+    }
+  t = casheph_get_transaction (ce, "26d5b26ad0b23fd822f2c63a6e1084e0");
+  if (t->date_entered != 1354553025)
+    {
+      return false;
+    }
+  t = casheph_get_transaction (ce, "b1bac36e34d568e6363a81f2f61af197");
+  if (t->date_entered != 1354553048)
+    {
+      return false;
+    }
+  t = casheph_get_transaction (ce, "2205e761a5c5abbc66f34be4e212e457");
+  if (t->date_entered != 1354553221)
+    {
+      return false;
+    }
+  return true;
+}
+
+bool
 transaction_date_posted_2 ()
 {
   casheph_t *ce = casheph_open ("test2.gnucash");
@@ -445,5 +482,7 @@ main (int argc, char *argv[])
            "The transactions have the correct posted dates [test2.gnucash]");
   CE_TEST (res, transaction_values_for_checking,
            "The transactions have the correct values for checking [test.gnucash]");
+  CE_TEST (res, transaction_date_entered,
+           "The transactions have the correct entered dates [test.gnucash]");
   return res?0:1;
 }

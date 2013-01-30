@@ -379,17 +379,18 @@ casheph_parse_splits (casheph_split_t ***splits, int *n_splits, casheph_tag_t **
 }
 
 void
-casheph_parse_date_posted (time_t *date_posted, casheph_tag_t **tag, gzFile file)
+casheph_parse_date_field (time_t *date, casheph_tag_t **tag,
+                          const char *tag_name, gzFile file)
 {
-  if ((*tag) != NULL && strcmp ((*tag)->name, "trn:date-posted") == 0)
+  if ((*tag) != NULL && strcmp ((*tag)->name, tag_name) == 0)
     {
       casheph_tag_t *date_tag = casheph_parse_tag (file);
       if (strcmp (date_tag->name, "ts:date") != 0)
         {
           fprintf (stderr, "No ts:date found\n");
         }
-      char date_posted_str[25];
-      if (gzread (file, date_posted_str, 25) < 25)
+      char date_str[25];
+      if (gzread (file, date_str, 25) < 25)
         {
           fprintf (stderr, "Couldn't read expected 25 bytes of date\n");
         }
@@ -405,30 +406,45 @@ casheph_parse_date_posted (time_t *date_posted, casheph_tag_t **tag, gzFile file
           tzset ();
           struct tm tm;
           memset (&tm, 0, sizeof (struct tm));
-          strptime (date_posted_str, "%Y-%m-%d %H:%M:%S", &tm);
-          (*date_posted) = mktime (&tm);
-          (*date_posted) += tm.tm_gmtoff;
-          int minutes_to_add = date_posted_str[24] - '0'
-            + (date_posted_str[23] - '0') * 10
-            + (date_posted_str[22] - '0') * 60
-            + (date_posted_str[21] - '0') * 600;
+          strptime (date_str, "%Y-%m-%d %H:%M:%S", &tm);
+          (*date) = mktime (&tm);
+          (*date) += tm.tm_gmtoff;
+          int minutes_to_add = date_str[24] - '0'
+            + (date_str[23] - '0') * 10
+            + (date_str[22] - '0') * 60
+            + (date_str[21] - '0') * 600;
           int seconds_to_add = minutes_to_add * 60;
-          if (date_posted_str[20] == '+')
+          if (date_str[20] == '+')
             {
               seconds_to_add *= -1;
             }
-          (*date_posted) += seconds_to_add;
+          (*date) += seconds_to_add;
           casheph_tag_destroy (*tag);
           *tag = casheph_parse_tag (file);
-          if (strcmp ((*tag)->name, "/trn:date-posted") != 0)
+          char *endtagname = (char*)malloc (strlen (tag_name) + 2);
+          strcpy (endtagname + 1, tag_name);
+          endtagname[0] = '/';
+          if (strcmp ((*tag)->name, endtagname) != 0)
             {
-              fprintf (stderr, "Couldn't find matching </trn:date-posted>\n");
+              fprintf (stderr, "Couldn't find matching <%s>\n", endtagname);
               exit (1);
             }
         }
       casheph_tag_destroy (*tag);
       *tag = NULL;
     }
+}
+
+void
+casheph_parse_date_posted (time_t *date_posted, casheph_tag_t **tag, gzFile file)
+{
+  casheph_parse_date_field (date_posted, tag, "trn:date-posted", file);
+}
+
+void
+casheph_parse_date_entered (time_t *date_posted, casheph_tag_t **tag, gzFile file)
+{
+  casheph_parse_date_field (date_posted, tag, "trn:date-entered", file);
 }
 
 casheph_transaction_t *
@@ -445,6 +461,7 @@ casheph_parse_trn_contents (gzFile file)
       casheph_parse_simple_complete_tag (&(trn->desc), &tag, "trn:description", file);
       casheph_parse_splits (&(trn->splits), &(trn->n_splits), &tag, file);
       casheph_parse_date_posted (&(trn->date_posted), &tag, file);
+      casheph_parse_date_entered (&(trn->date_entered), &tag, file);
       casheph_skip_any_tag (&tag, file);
       tag = casheph_parse_tag (file);
     }
