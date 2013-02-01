@@ -575,24 +575,42 @@ casheph_parse_trn_contents (gzFile file)
 }
 
 void
-parse_template_transactions (int *n_template_transactions,
+parse_template_transactions (casheph_account_t **template_root,
+                             int *n_template_transactions,
                              casheph_transaction_t ***template_transactions,
                              gzFile file)
 {
+  int n_accounts = 0;
+  casheph_account_t **accounts = NULL;
   casheph_tag_t *tag = casheph_parse_tag (file);
   while (strcmp (tag->name, "/gnc:template-transactions") != 0)
     {
       if (strcmp (tag->name, "gnc:account") == 0)
         {
           casheph_account_t *act = parse_account_contents (file);
+          if (act != NULL)
+            {
+              ++n_accounts;
+              accounts = (casheph_account_t**)realloc (accounts, sizeof (casheph_account_t*) * n_accounts);
+              accounts[n_accounts - 1] = act;
+              if (strcmp (act->type, "ROOT") == 0)
+                {
+                  *template_root = act;
+                }
+            }
         }
       else if (strcmp (tag->name, "gnc:transaction") == 0)
         {
           casheph_transaction_t *trn = casheph_parse_trn_contents (file);
+          ++(*n_template_transactions);
+          *template_transactions = (casheph_transaction_t**)realloc (*template_transactions,
+                                                                     sizeof (casheph_transaction_t*) * *n_template_transactions);
+          (*template_transactions)[*n_template_transactions - 1] = trn;
         }
       casheph_tag_destroy (tag);
       tag = casheph_parse_tag (file);
     }
+  casheph_account_collect_accounts (*template_root, n_accounts, accounts);
   casheph_tag_destroy (tag);
 }
 
@@ -641,6 +659,7 @@ casheph_open (const char *filename)
   ce->transactions = NULL;
   ce->n_template_transactions = 0;
   ce->template_transactions = NULL;
+  ce->template_root = NULL;
   int n_accounts = 0;
   casheph_account_t **accounts = NULL;
   while (!gzeof (file))
@@ -673,7 +692,8 @@ casheph_open (const char *filename)
         {
           casheph_tag_destroy (tag);
           tag = NULL;
-          parse_template_transactions (&(ce->n_template_transactions),
+          parse_template_transactions (&(ce->template_root),
+                                       &(ce->n_template_transactions),
                                        &(ce->template_transactions), file);
         }
       casheph_tag_destroy (tag);
