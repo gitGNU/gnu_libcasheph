@@ -575,7 +575,9 @@ casheph_parse_trn_contents (gzFile file)
 }
 
 void
-parse_template_transactions (gzFile file)
+parse_template_transactions (int *n_template_transactions,
+                             casheph_transaction_t ***template_transactions,
+                             gzFile file)
 {
   casheph_tag_t *tag = casheph_parse_tag (file);
   while (strcmp (tag->name, "/gnc:template-transactions") != 0)
@@ -637,6 +639,8 @@ casheph_open (const char *filename)
   casheph_t *ce = (casheph_t*)malloc (sizeof (casheph_t));
   ce->n_transactions = 0;
   ce->transactions = NULL;
+  ce->n_template_transactions = 0;
+  ce->template_transactions = NULL;
   int n_accounts = 0;
   casheph_account_t **accounts = NULL;
   while (!gzeof (file))
@@ -669,7 +673,8 @@ casheph_open (const char *filename)
         {
           casheph_tag_destroy (tag);
           tag = NULL;
-          parse_template_transactions (file);
+          parse_template_transactions (&(ce->n_template_transactions),
+                                       &(ce->template_transactions), file);
         }
       casheph_tag_destroy (tag);
     }

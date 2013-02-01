@@ -41,6 +41,8 @@ struct casheph_s
   casheph_account_t *root;
   int n_transactions;
   casheph_transaction_t **transactions;
+  int n_template_transactions;
+  casheph_transaction_t **template_transactions;
   char *book_id;
 };
 

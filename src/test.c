@@ -555,6 +555,24 @@ saving_produces_file_with_same_content_2 ()
   return res == 0;
 }
 
+bool
+some_have_zero_template_transactions ()
+{
+  casheph_t *ce = casheph_open ("test.gnucash");
+  if (ce->n_template_transactions != 0)
+    {
+      printf ("ce->n_template_transactions: %d\n", ce->n_template_transactions);
+      return false;
+    }
+  ce = casheph_open ("test2.gnucash");
+  if (ce->n_template_transactions != 0)
+    {
+      printf ("ce->n_template_transactions: %d\n", ce->n_template_transactions);
+      return false;
+    }
+  return true;
+}
+
 #define CE_TEST(r, f, s) r = r && test (f, s)
 
 int
@@ -603,5 +621,7 @@ main (int argc, char *argv[])
            "Saving produces a file with the same content [test.gnucash]");
   CE_TEST (res, saving_produces_file_with_same_content_2,
            "Saving produces a file with the same content [test2.gnucash]");
+  CE_TEST (res, some_have_zero_template_transactions,
+           "Some have zero template transactions");
   return res?0:1;
 }
