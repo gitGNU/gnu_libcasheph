@@ -22,6 +22,8 @@
 
 #include "casheph.h"
 
+casheph_slot_t *casheph_parse_slot_contents (gzFile file);
+
 void
 casheph_consume_whitespace (int *c, gzFile file)
 {
@@ -245,55 +247,136 @@ casheph_skip_any_tag (casheph_tag_t **tag, gzFile file)
     }
 }
 
+casheph_gdate_t *
+casheph_parse_gdate (gzFile file)
+{
+  casheph_gdate_t *date = (casheph_gdate_t*)malloc (sizeof (casheph_gdate_t));
+  casheph_tag_t *tag = casheph_parse_tag (file);
+  if (strcmp (tag->name, "gdate") != 0)
+    {
+      fprintf (stderr, "gdate tag not found in slot of type gdate\n");
+    }
+  char *buf = casheph_parse_text (file);
+  date->year = (buf[0] - '0') * 1000 + (buf[1] - '0') * 1000
+    + (buf[2] - '0') * 10 + (buf[3] - '0');
+  date->month = (buf[5] - '0') * 10 + (buf[6] - '0');
+  date->day = (buf[8] - '0') * 10 + (buf[9] - '0');
+  casheph_tag_destroy (tag);
+  tag = casheph_parse_tag (file);
+  if (strcmp (tag->name, "/gdate") != 0)
+    {
+      fprintf (stderr, "Couldn't find matching </gdate>\n");
+      exit (1);
+    }
+  casheph_tag_destroy (tag);
+  return date;
+}
+
+void
+casheph_parse_slot_value (void **value, casheph_slot_type_t *type, casheph_tag_t **tag, gzFile file)
+{
+  if (*tag != NULL && strcmp ((*tag)->name, "slot:value") == 0)
+    {
+      if ((*tag)->n_attributes > 0
+          && strcmp ((*tag)->attributes[0]->key, "type") == 0
+          && strcmp ((*tag)->attributes[0]->val, "gdate") == 0)
+        {
+          *type = ce_gdate;
+          /* printf ("parsing gdate\n"); */
+          *value = casheph_parse_gdate (file);
+          /* printf ("%d/%d/%d\n", date->month, date->day, date->year); */
+          /* printf ("destroying %s and getting a new one\n", slot_tag->name); */
+          casheph_tag_destroy (*tag);
+          *tag = casheph_parse_tag (file);
+        }
+      /* printf ("<%s>\n", slot_tag->name); */
+      else if ((*tag)->n_attributes > 0
+               && strcmp ((*tag)->attributes[0]->key, "type") == 0
+               && strcmp ((*tag)->attributes[0]->val, "string") == 0)
+        {
+          *type = ce_string;
+          char *buf = casheph_parse_text (file);
+          *value = buf;
+          casheph_tag_destroy (*tag);
+          *tag = casheph_parse_tag (file);
+        }
+      else if ((*tag)->n_attributes > 0
+               && strcmp ((*tag)->attributes[0]->key, "type") == 0
+               && strcmp ((*tag)->attributes[0]->val, "guid") == 0)
+        {
+          *type = ce_guid;
+          char *buf = casheph_parse_text (file);
+          *value = buf;
+          casheph_tag_destroy (*tag);
+          *tag = casheph_parse_tag (file);
+        }
+      else if ((*tag)->n_attributes > 0
+               && strcmp ((*tag)->attributes[0]->key, "type") == 0
+               && strcmp ((*tag)->attributes[0]->val, "numeric") == 0)
+        {
+          *type = ce_numeric;
+          char *buf = casheph_parse_text (file);
+          int *val = (int*)malloc (sizeof (int));
+          sscanf (buf, "%d", val);
+          *value = val;
+          free (buf);
+          casheph_tag_destroy (*tag);
+          *tag = casheph_parse_tag (file);
+        }
+      else if ((*tag)->n_attributes > 0
+               && strcmp ((*tag)->attributes[0]->key, "type") == 0
+               && strcmp ((*tag)->attributes[0]->val, "frame") == 0)
+        {
+          *type = ce_frame;
+          casheph_frame_t *frame = (casheph_frame_t*)malloc (sizeof (casheph_frame_t));
+          frame->n_slots = 0;
+          frame->slots = NULL;
+          *tag = casheph_parse_tag (file);
+          while (strcmp ((*tag)->name, "slot") == 0)
+            {
+              casheph_slot_t *slot = casheph_parse_slot_contents (file);
+              ++frame->n_slots;
+              frame->slots = (casheph_slot_t**)realloc (frame->slots, sizeof (casheph_slot_t*) * frame->n_slots);
+              frame->slots[frame->n_slots - 1] = slot;
+              casheph_tag_destroy (*tag);
+              *tag = casheph_parse_tag (file);
+            }
+          *value = frame;
+          /* casheph_tag_destroy (*tag); */
+          /* *tag = casheph_parse_tag (file); */
+        }
+      /* printf ("slot_tag->name: %s\n", slot_tag->name); */
+      if (strcmp ((*tag)->name, "/slot:value") != 0)
+        {
+          fprintf (stderr, "Couldn't find matching </slot:value>\n");
+          fprintf (stderr, "Instead, found <%s>\n", (*tag)->name);
+          exit (1);
+        }
+      casheph_tag_destroy (*tag);
+      *tag = NULL;
+    }
+}
+
 casheph_slot_t *
 casheph_parse_slot_contents (gzFile file)
 {
   casheph_slot_t *slot = (casheph_slot_t*)malloc (sizeof (casheph_slot_t));
   slot->key = NULL;
-  slot->type = gdate;
   slot->value = NULL;
   casheph_tag_t *slot_tag = casheph_parse_tag (file);
   while (strcmp (slot_tag->name, "/slot") != 0)
     {
       casheph_parse_simple_complete_tag (&(slot->key), &slot_tag, "slot:key", file);
-      if (slot_tag != NULL && strcmp (slot_tag->name, "slot:value") == 0)
-        {
-          if (strcmp (slot_tag->attributes[0]->key, "type") == 0
-              && strcmp (slot_tag->attributes[0]->val, "gdate") == 0)
-            {
-              casheph_gdate_t *date;
-              date = (casheph_gdate_t*)malloc (sizeof (casheph_gdate_t));
-              slot_tag = casheph_parse_tag (file);
-              if (strcmp (slot_tag->name, "gdate") != 0)
-                {
-                  fprintf (stderr, "gdate tag not found in slot of type gdate\n");
-                }
-              char *buf = casheph_parse_text (file);
-              date->year = (buf[0] - '0') * 1000 + (buf[1] - '0') * 1000
-                + (buf[2] - '0') * 10 + (buf[3] - '0');
-              date->month = (buf[5] - '0') * 10 + (buf[6] - '0');
-              date->day = (buf[8] - '0') * 10 + (buf[9] - '0');
-              slot->value = date;
-              casheph_tag_destroy (slot_tag);
-              slot_tag = casheph_parse_tag (file);
-              if (strcmp (slot_tag->name, "/gdate") != 0)
-                {
-                  fprintf (stderr, "Couldn't find matching </gdate>\n");
-                  exit (1);
-                }
-              casheph_tag_destroy (slot_tag);
-              slot_tag = casheph_parse_tag (file);
-              if (strcmp (slot_tag->name, "/slot:value") != 0)
-                {
-                  fprintf (stderr, "Couldn't find matching </slot:value>\n");
-                  exit (1);
-                }
-              casheph_tag_destroy (slot_tag);
-              slot_tag = NULL;
-            }
-        }
+      casheph_parse_slot_value (&(slot->value), &(slot->type), &slot_tag, file);
       casheph_skip_any_tag (&slot_tag, file);
+      casheph_tag_destroy (slot_tag);
       slot_tag = casheph_parse_tag (file);
+    }
+  if (strcmp (slot_tag->name, "/slot") != 0)
+    {
+      fprintf (stderr, "Couldn't find matching </slot>\n");
+      fprintf (stderr, "Instead, found <%s>\n", slot_tag->name);
+      exit (1);
     }
   casheph_tag_destroy (slot_tag);
   return slot;
@@ -321,7 +404,7 @@ casheph_parse_slots (const char *prefix, casheph_slot_t ***slots, int *n_slots, 
         }
       if (strcmp (slot_tag->name, endtagname) != 0)
         {
-          fprintf (stderr, "Couldn't find matching </trn:slots>\n");
+          fprintf (stderr, "Couldn't find matching <%s>\n", endtagname);
         }
       casheph_tag_destroy (*tag);
       *tag = NULL;
@@ -422,12 +505,15 @@ casheph_parse_split_contents (gzFile file)
   split->reconciled_state = NULL;
   split->account = NULL;
   split->value = 0;
+  split->slots = NULL;
+  split->n_slots = 0;
   casheph_tag_t *split_tag = casheph_parse_tag (file);
   while (strcmp (split_tag->name, "/trn:split") != 0)
     {
       casheph_parse_simple_complete_tag (&(split->id), &split_tag, "split:id", file);
       casheph_parse_simple_complete_tag (&(split->reconciled_state), &split_tag, "split:reconciled-state", file);
       casheph_parse_simple_complete_tag (&(split->account), &split_tag, "split:account", file);
+      casheph_parse_split_slots (&(split->slots), &(split->n_slots), &split_tag, file);
       if (split_tag != NULL && strcmp (split_tag->name, "split:value") == 0)
         {
           char *buf = casheph_parse_text (file);
@@ -478,6 +564,12 @@ void
 casheph_parse_trn_slots (casheph_slot_t ***slots, int *n_slots, casheph_tag_t **tag, gzFile file)
 {
   casheph_parse_slots ("trn:", slots, n_slots, tag, file);
+}
+
+void
+casheph_parse_split_slots (casheph_slot_t ***slots, int *n_slots, casheph_tag_t **tag, gzFile file)
+{
+  casheph_parse_slots ("split:", slots, n_slots, tag, file);
 }
 
 void
@@ -807,7 +899,7 @@ casheph_write_transaction (casheph_transaction_t *trn, gzFile file)
         {
           gzprintf (file, "    <slot>\n");
           gzprintf (file, "      <slot:key>%s</slot:key>\n", trn->slots[i]->key);
-          if (trn->slots[i]->type == gdate)
+          if (trn->slots[i]->type == ce_gdate)
             {
               casheph_gdate_t *date = (casheph_gdate_t*)trn->slots[i]->value;
               gzprintf (file, "      <slot:value type=\"gdate\">\n");

@@ -32,9 +32,11 @@ typedef struct casheph_split_s casheph_split_t;
 
 typedef struct casheph_slot_s casheph_slot_t;
 
-typedef enum { gdate } casheph_slot_type_t;
+typedef enum { ce_gdate, ce_frame, ce_guid, ce_string, ce_numeric } casheph_slot_type_t;
 
 typedef struct casheph_gdate_s casheph_gdate_t;
+
+typedef struct casheph_frame_s casheph_frame_t;
 
 struct casheph_s
 {
@@ -78,6 +80,8 @@ struct casheph_split_s
   char *reconciled_state;
   long value;
   char *account;
+  int n_slots;
+  casheph_slot_t **slots;
 };
 
 struct casheph_slot_s
@@ -85,6 +89,12 @@ struct casheph_slot_s
   char *key;
   casheph_slot_type_t type;
   void *value;
+};
+
+struct casheph_frame_s
+{
+  int n_slots;
+  casheph_slot_t **slots;
 };
 
 struct casheph_gdate_s

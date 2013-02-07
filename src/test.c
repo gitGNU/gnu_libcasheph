@@ -456,7 +456,7 @@ has_one_slot_with_date_value (casheph_transaction_t *t, unsigned int year,
     {
       return false;
     }
-  if (t->slots[0]->type != gdate)
+  if (t->slots[0]->type != ce_gdate)
     {
       return false;
     }
@@ -585,6 +585,65 @@ test3_template_root_has_four_accounts ()
   return ce->template_root != NULL && ce->template_root->n_accounts == 4;
 }
 
+bool
+test3_template_trn_splits_have_frame_slots_with_5_slots ()
+{
+  casheph_t *ce = casheph_open ("test3.gnucash");
+  if (ce->n_template_transactions != 4)
+    {
+      return false;
+    }
+  if (ce->template_transactions[0]->n_splits != 2)
+    {
+      return false;
+    }
+  if (ce->template_transactions[0]->splits[0]->n_slots != 1)
+    {
+      return false;
+    }
+  if (ce->template_transactions[0]->splits[0]->slots[0]->type != ce_frame)
+    {
+      return false;
+    }
+  casheph_frame_t *frame;
+  frame = (casheph_frame_t*)(ce->template_transactions[0]->splits[0]->slots[0]->value);
+  if (frame->n_slots != 5)
+    {
+      return false;
+    }
+  if (frame->slots[0]->type != ce_guid
+      || strcmp ("account", frame->slots[0]->key) != 0
+      || strcmp ("014ef6a0e294480bdeffef3873e978f2", frame->slots[0]->value) != 0)
+    {
+      return false;
+    }
+  if (frame->slots[1]->type != ce_string
+      || strcmp ("credit-formula", frame->slots[1]->key) != 0
+      || strcmp ("2000", frame->slots[1]->value) != 0)
+    {
+      return false;
+    }
+  if (frame->slots[2]->type != ce_numeric
+      || strcmp ("credit-numeric", frame->slots[2]->key) != 0
+      || *((int*)frame->slots[2]->value) != 2000)
+    {
+      return false;
+    }
+  if (frame->slots[3]->type != ce_string
+      || strcmp ("debit-formula", frame->slots[3]->key) != 0
+      || strcmp ("", frame->slots[3]->value) != 0)
+    {
+      return false;
+    }
+  if (frame->slots[4]->type != ce_numeric
+      || strcmp ("debit-numeric", frame->slots[4]->key)
+      || *((int*)frame->slots[4]->value) != 0)
+    {
+      return false;
+    }
+  return true;
+}
+
 #define CE_TEST(r, f, s) r = r && test (f, s)
 
 int
@@ -639,5 +698,7 @@ main (int argc, char *argv[])
            "test3.gnucash has four template transactions");
   CE_TEST (res, test3_template_root_has_four_accounts,
            "test3.gnucash has a template root with four accounts in it");
+  CE_TEST (res, test3_template_trn_splits_have_frame_slots_with_5_slots,
+           "test3.gnucash template trn splits have frame slots with 5 slots");
   return res?0:1;
 }
