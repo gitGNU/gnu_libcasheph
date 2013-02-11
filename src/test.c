@@ -625,7 +625,7 @@ test3_template_trn_splits_have_frame_slots_with_5_slots ()
     }
   if (frame->slots[2]->type != ce_numeric
       || strcmp ("credit-numeric", frame->slots[2]->key) != 0
-      || *((int*)frame->slots[2]->value) != 2000)
+      || *((long*)frame->slots[2]->value) != 200000)
     {
       return false;
     }
@@ -637,7 +637,7 @@ test3_template_trn_splits_have_frame_slots_with_5_slots ()
     }
   if (frame->slots[4]->type != ce_numeric
       || strcmp ("debit-numeric", frame->slots[4]->key)
-      || *((int*)frame->slots[4]->value) != 0)
+      || *((long*)frame->slots[4]->value) != 0)
     {
       return false;
     }

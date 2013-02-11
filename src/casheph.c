@@ -272,6 +272,35 @@ casheph_parse_gdate (gzFile file)
   return date;
 }
 
+long
+casheph_parse_value_str (const char *str)
+{
+  long val;
+  int slash_index = -1;
+  int i;
+  for (i = 0; i < strlen (str); ++i)
+    {
+      if (str[i] == '/')
+        {
+          slash_index = i;
+          break;
+        }
+    }
+  if (slash_index >= 0)
+    {
+      long n;
+      long d;
+      sscanf (str, "%ld/%ld", &n, &d);
+      val = n * 100 / d;
+    }
+  else
+    {
+      sscanf (str, "%ld", &val);
+      val *= 100;
+    }
+  return val;
+}
+
 void
 casheph_parse_slot_value (void **value, casheph_slot_type_t *type, casheph_tag_t **tag, gzFile file)
 {
@@ -316,9 +345,8 @@ casheph_parse_slot_value (void **value, casheph_slot_type_t *type, casheph_tag_t
         {
           *type = ce_numeric;
           char *buf = casheph_parse_text (file);
-          int *val = (int*)malloc (sizeof (int));
-          sscanf (buf, "%d", val);
-          *value = val;
+          *value = (long*)malloc (sizeof (long));
+          *((long*)*value) = casheph_parse_value_str (buf);
           free (buf);
           casheph_tag_destroy (*tag);
           *tag = casheph_parse_tag (file);
@@ -497,6 +525,12 @@ casheph_account_collect_accounts (casheph_account_t *act,
     }
 }
 
+void
+casheph_parse_split_slots (casheph_slot_t ***slots, int *n_slots, casheph_tag_t **tag, gzFile file)
+{
+  casheph_parse_slots ("split:", slots, n_slots, tag, file);
+}
+
 casheph_split_t *
 casheph_parse_split_contents (gzFile file)
 {
@@ -517,8 +551,7 @@ casheph_parse_split_contents (gzFile file)
       if (split_tag != NULL && strcmp (split_tag->name, "split:value") == 0)
         {
           char *buf = casheph_parse_text (file);
-          long val;
-          sscanf (buf, "%ld", &val);
+          long val = casheph_parse_value_str (buf);
           split->value = val;
           casheph_tag_destroy (split_tag);
           split_tag = casheph_parse_tag (file);
@@ -564,12 +597,6 @@ void
 casheph_parse_trn_slots (casheph_slot_t ***slots, int *n_slots, casheph_tag_t **tag, gzFile file)
 {
   casheph_parse_slots ("trn:", slots, n_slots, tag, file);
-}
-
-void
-casheph_parse_split_slots (casheph_slot_t ***slots, int *n_slots, casheph_tag_t **tag, gzFile file)
-{
-  casheph_parse_slots ("split:", slots, n_slots, tag, file);
 }
 
 void
