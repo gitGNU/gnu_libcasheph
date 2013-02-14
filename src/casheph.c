@@ -229,6 +229,19 @@ casheph_parse_simple_complete_tag (char **dest, casheph_tag_t **tag, const char 
 }
 
 void
+casheph_parse_simple_int_tag (int *dest, casheph_tag_t **tag, const char *name, gzFile file)
+{
+  char *buf = NULL;
+  casheph_parse_simple_complete_tag (&buf, tag, name, file);
+  if (buf != NULL)
+    {
+      sscanf (buf, "%d", dest);
+      free (buf);
+      buf = NULL;
+    }
+}
+
+void
 casheph_skip_any_tag (casheph_tag_t **tag, gzFile file)
 {
   if (*tag != NULL && (*tag)->name[0] != '/')
@@ -272,10 +285,10 @@ casheph_parse_gdate (gzFile file)
   return date;
 }
 
-long
+uint64_t
 casheph_parse_value_str (const char *str)
 {
-  long val;
+  uint64_t val;
   int slash_index = -1;
   int i;
   for (i = 0; i < strlen (str); ++i)
@@ -288,10 +301,10 @@ casheph_parse_value_str (const char *str)
     }
   if (slash_index >= 0)
     {
-      long n;
-      long d;
-      sscanf (str, "%ld/%ld", &n, &d);
-      val = n * 100 / d;
+      int32_t n;
+      uint32_t d;
+      sscanf (str, "%d/%d", &n, &d);
+      val = ((uint64_t)d << 32) | (uint32_t)n;
     }
   else
     {
@@ -447,6 +460,36 @@ casheph_parse_account_slots (casheph_slot_t ***slots, int *n_slots, casheph_tag_
   casheph_parse_slots ("act:", slots, n_slots, tag, file);
 }
 
+void
+casheph_parse_commodity (casheph_commodity_t **commodity_ptr, casheph_tag_t **tag, const char *tagname, gzFile file)
+{
+  char *endtagname = (char*)malloc (strlen (tagname) + 2);
+  sprintf (endtagname, "/%s", tagname);
+  if (*tag != NULL && strcmp ((*tag)->name, tagname) == 0)
+    {
+      casheph_commodity_t *commodity = (casheph_commodity_t*)malloc (sizeof (casheph_commodity_t));
+      commodity->space = NULL;
+      commodity->id = NULL;
+      casheph_tag_destroy (*tag);
+      *tag = casheph_parse_tag (file);
+      while (strcmp ((*tag)->name, endtagname) != 0)
+        {
+          casheph_parse_simple_complete_tag (&(commodity->space), tag, "cmdty:space", file);
+          casheph_parse_simple_complete_tag (&(commodity->id), tag, "cmdty:id", file);
+          casheph_skip_any_tag (tag, file);
+          *tag = casheph_parse_tag (file);
+        }
+      if (strcmp ((*tag)->name, endtagname) != 0)
+        {
+          fprintf (stderr, "Couldn't find matching <%s>\n", endtagname);
+        }
+      casheph_tag_destroy (*tag);
+      *tag = NULL;
+      *commodity_ptr = commodity;
+    }
+  free (endtagname);
+}
+
 casheph_account_t *
 parse_account_contents (gzFile file)
 {
@@ -460,6 +503,8 @@ parse_account_contents (gzFile file)
   account->parent = NULL;
   account->slots = NULL;
   account->n_slots = 0;
+  account->commodity = NULL;
+  char *cmdty_scu = NULL;
   casheph_tag_t *tag = casheph_parse_tag (file);
   while (strcmp (tag->name, "/gnc:account") != 0)
     {
@@ -469,6 +514,14 @@ parse_account_contents (gzFile file)
       casheph_parse_simple_complete_tag (&(account->description), &tag, "act:description", file);
       casheph_parse_simple_complete_tag (&(account->parent), &tag, "act:parent", file);
       casheph_parse_account_slots (&(account->slots), &(account->n_slots), &tag, file);
+      casheph_parse_commodity (&(account->commodity), &tag, "act:commodity", file);
+      casheph_parse_simple_complete_tag (&cmdty_scu, &tag, "act:commodity-scu", file);
+      if (cmdty_scu != NULL)
+        {
+          sscanf (cmdty_scu, "%d", &(account->commodity_scu));
+          free (cmdty_scu);
+          cmdty_scu = NULL;
+        }
       casheph_skip_any_tag (&tag, file);
       tag = casheph_parse_tag (file);
     }
@@ -539,6 +592,7 @@ casheph_parse_split_contents (gzFile file)
   split->reconciled_state = NULL;
   split->account = NULL;
   split->value = 0;
+  split->quantity = 0;
   split->slots = NULL;
   split->n_slots = 0;
   casheph_tag_t *split_tag = casheph_parse_tag (file);
@@ -551,13 +605,26 @@ casheph_parse_split_contents (gzFile file)
       if (split_tag != NULL && strcmp (split_tag->name, "split:value") == 0)
         {
           char *buf = casheph_parse_text (file);
-          long val = casheph_parse_value_str (buf);
+          uint64_t val = casheph_parse_value_str (buf);
           split->value = val;
           casheph_tag_destroy (split_tag);
           split_tag = casheph_parse_tag (file);
           if (strcmp (split_tag->name, "/split:value") != 0)
             {
               fprintf (stderr, "Couldn't find matching </split:value>\n");
+              exit (1);
+            }
+        }
+      if (split_tag != NULL && strcmp (split_tag->name, "split:quantity") == 0)
+        {
+          char *buf = casheph_parse_text (file);
+          uint64_t val = casheph_parse_value_str (buf);
+          split->quantity = val;
+          casheph_tag_destroy (split_tag);
+          split_tag = casheph_parse_tag (file);
+          if (strcmp (split_tag->name, "/split:quantity") != 0)
+            {
+              fprintf (stderr, "Couldn't find matching </split:quantity>\n");
               exit (1);
             }
         }
@@ -694,6 +761,130 @@ casheph_parse_trn_contents (gzFile file)
 }
 
 void
+casheph_parse_simple_bool_tag (bool *out, casheph_tag_t **tag, const char *tagname, gzFile file)
+{
+  char *temp = NULL;
+  casheph_parse_simple_complete_tag (&temp, tag, tagname, file);
+  if (temp != NULL)
+    {
+      *out = strcmp (temp, "y") == 0;
+      free (temp);
+      temp = NULL;
+    }
+}
+
+casheph_recurrence_t *
+casheph_parse_recurrence (casheph_tag_t **tag, gzFile file)
+{
+  casheph_recurrence_t *ret = NULL;
+  if (*tag != NULL && strcmp ((*tag)->name, "gnc:recurrence") == 0)
+    {
+      casheph_recurrence_t *recurrence = (casheph_recurrence_t*)malloc (sizeof (casheph_recurrence_t));
+      recurrence->mult = 0;
+      recurrence->period_type = NULL;
+      recurrence->start = NULL;
+      recurrence->weekend_adj = NULL;
+      *tag = casheph_parse_tag (file);
+      while (strcmp ((*tag)->name, "/gnc:recurrence") != 0)
+        {
+          casheph_parse_simple_int_tag (&(recurrence->mult), tag, "recurrence:mult", file);
+          casheph_parse_simple_complete_tag (&(recurrence->period_type), tag, "recurrence:period_type", file);
+          casheph_parse_simple_complete_tag (&(recurrence->weekend_adj), tag, "recurrence:weekend_adj", file);
+          if (*tag != NULL && strcmp ((*tag)->name, "recurrence:start") == 0)
+            {
+              recurrence->start = casheph_parse_gdate (file);
+              casheph_tag_destroy (*tag);
+              *tag = NULL;
+            }
+          casheph_skip_any_tag (tag, file);
+          *tag = casheph_parse_tag (file);
+        }
+      if (strcmp ((*tag)->name, "/gnc:recurrence") != 0)
+        {
+          fprintf (stderr, "Couldn't find matching </gnc:recurrence>\n");
+        }
+      casheph_tag_destroy (*tag);
+      *tag = NULL;
+      ret = recurrence;
+    }
+  return ret;
+}
+
+void
+casheph_parse_schedule (casheph_schedule_t **schedule_ptr, casheph_tag_t **tag, const char *tagname, gzFile file)
+{
+  char *endtagname = (char*)malloc (strlen (tagname) + 2);
+  sprintf (endtagname, "/%s", tagname);
+  if (*tag != NULL && strcmp ((*tag)->name, tagname) == 0)
+    {
+      casheph_schedule_t *schedule = (casheph_schedule_t*)malloc (sizeof (casheph_schedule_t));
+      schedule->n_recurrences = 0;
+      schedule->recurrences = NULL;
+      *tag = casheph_parse_tag (file);
+      while (strcmp ((*tag)->name, endtagname) != 0)
+        {
+          casheph_recurrence_t *rec = casheph_parse_recurrence (tag, file);
+          if (rec != NULL)
+            {
+              ++schedule->n_recurrences;
+              schedule->recurrences = (casheph_recurrence_t**)realloc (schedule->recurrences, sizeof (casheph_recurrence_t*) * schedule->n_recurrences);
+              schedule->recurrences[schedule->n_recurrences - 1] = rec;
+            }
+          casheph_skip_any_tag (tag, file);
+          *tag = casheph_parse_tag (file);
+        }
+      if (strcmp ((*tag)->name, endtagname) != 0)
+        {
+          fprintf (stderr, "Couldn't find matching <%s>\n", endtagname);
+        }
+      casheph_tag_destroy (*tag);
+      *tag = NULL;
+      *schedule_ptr = schedule;
+    }
+  free (endtagname);
+}
+
+casheph_schedxaction_t *
+casheph_parse_schedxaction_contents (gzFile file)
+{
+  casheph_schedxaction_t *sx = (casheph_schedxaction_t*)malloc (sizeof (casheph_schedxaction_t));
+  sx->id = NULL;
+  sx->start = NULL;
+  sx->last = NULL;
+  sx->schedule = NULL;
+  casheph_tag_t *tag = casheph_parse_tag (file);
+  while (strcmp (tag->name, "/gnc:schedxaction") != 0)
+    {
+      casheph_parse_simple_complete_tag (&(sx->id), &tag, "sx:id", file);
+      casheph_parse_simple_complete_tag (&(sx->name), &tag, "sx:name", file);
+      casheph_parse_simple_bool_tag (&(sx->enabled), &tag, "sx:enabled", file);
+      casheph_parse_simple_bool_tag (&(sx->auto_create), &tag, "sx:autoCreate", file);
+      casheph_parse_simple_bool_tag (&(sx->auto_create_notify), &tag, "sx:autoCreateNotify", file);
+      casheph_parse_simple_int_tag (&(sx->advance_create_days), &tag, "sx:advanceCreateDays", file);
+      casheph_parse_simple_int_tag (&(sx->advance_remind_days), &tag, "sx:advanceRemindDays", file);
+      casheph_parse_simple_int_tag (&(sx->instance_count), &tag, "sx:instanceCount", file);
+      if (tag != NULL && strcmp (tag->name, "sx:start") == 0)
+        {
+          sx->start = casheph_parse_gdate (file);
+          casheph_tag_destroy (tag);
+          tag = NULL;
+        }
+      if (tag != NULL && strcmp (tag->name, "sx:last") == 0)
+        {
+          sx->last = casheph_parse_gdate (file);
+          casheph_tag_destroy (tag);
+          tag = NULL;
+        }
+      casheph_parse_simple_complete_tag (&(sx->templ_acct), &tag, "sx:templ-acct", file);
+      casheph_parse_schedule (&(sx->schedule), &tag, "sx:schedule", file);
+      casheph_skip_any_tag (&tag, file);
+      tag = casheph_parse_tag (file);
+    }
+  casheph_tag_destroy (tag);
+  return sx;
+}
+
+void
 parse_template_transactions (casheph_account_t **template_root,
                              int *n_template_transactions,
                              casheph_transaction_t ***template_transactions,
@@ -779,6 +970,8 @@ casheph_open (const char *filename)
   ce->n_template_transactions = 0;
   ce->template_transactions = NULL;
   ce->template_root = NULL;
+  ce->n_schedxactions = 0;
+  ce->schedxactions = NULL;
   int n_accounts = 0;
   casheph_account_t **accounts = NULL;
   while (!gzeof (file))
@@ -813,7 +1006,18 @@ casheph_open (const char *filename)
           tag = NULL;
           parse_template_transactions (&(ce->template_root),
                                        &(ce->n_template_transactions),
-                                       &(ce->template_transactions), file);
+                                       &(ce->template_transactions),
+                                       file);
+        }
+      if (tag != NULL && strcmp (tag->name, "gnc:schedxaction") == 0)
+        {
+          casheph_tag_destroy (tag);
+          tag = NULL;
+          ++ce->n_schedxactions;
+          casheph_schedxaction_t *sx = casheph_parse_schedxaction_contents (file);
+          ce->schedxactions = (casheph_schedxaction_t**)realloc (ce->schedxactions,
+                                                                 sizeof (casheph_schedxaction_t*) * ce->n_schedxactions);
+          ce->schedxactions[ce->n_schedxactions - 1] = sx;
         }
       casheph_tag_destroy (tag);
     }
@@ -841,6 +1045,18 @@ casheph_count_accounts (casheph_t *ce)
 }
 
 void
+casheph_write_commodity (casheph_commodity_t *cmdty, const char *prefix,
+                         const char *indent, gzFile file)
+{
+  gzprintf (file, "%s<%scommodity>\n", indent, prefix);
+  gzprintf (file, "%s  <cmdty:space>%s</cmdty:space>\n", indent,
+            cmdty->space);
+  gzprintf (file, "%s  <cmdty:id>%s</cmdty:id>\n", indent,
+            cmdty->id);
+  gzprintf (file, "%s</%scommodity>\n", indent, prefix);
+}
+
+void
 casheph_write_account (casheph_account_t *account, gzFile file)
 {
   gzputs (file, "<gnc:account version=\"2.0.0\">\n");
@@ -849,18 +1065,25 @@ casheph_write_account (casheph_account_t *account, gzFile file)
       gzprintf (file, "  <act:name>%s</act:name>\n", account->name);
       gzprintf (file, "  <act:id type=\"guid\">%s</act:id>\n", account->id);
       gzprintf (file, "  <act:type>ROOT</act:type>\n");
+      if (account->commodity != NULL)
+        {
+          casheph_write_commodity (account->commodity, "act:", "  ", file);
+          gzprintf (file, "  <act:commodity-scu>%d</act:commodity-scu>\n",
+                    account->commodity_scu);
+        }
     }
   else
     {
       gzprintf (file, "  <act:name>%s</act:name>\n", account->name);
       gzprintf (file, "  <act:id type=\"guid\">%s</act:id>\n", account->id);
       gzprintf (file, "  <act:type>%s</act:type>\n", account->type);
-      gzprintf (file, "  <act:commodity>\n");
-      gzprintf (file, "    <cmdty:space>ISO4217</cmdty:space>\n");
-      gzprintf (file, "    <cmdty:id>USD</cmdty:id>\n");
-      gzprintf (file, "  </act:commodity>\n");
-      gzprintf (file, "  <act:commodity-scu>100</act:commodity-scu>\n");
-      gzprintf (file, "  <act:description>%s</act:description>\n", account->description);
+      casheph_write_commodity (account->commodity, "act:", "  ", file);
+      gzprintf (file, "  <act:commodity-scu>%d</act:commodity-scu>\n",
+                account->commodity_scu);
+      if (account->description != NULL)
+        {
+          gzprintf (file, "  <act:description>%s</act:description>\n", account->description);
+        }
       if (account->n_slots > 0)
         {
           gzprintf (file, "  <act:slots>\n");
@@ -891,6 +1114,65 @@ casheph_write_accounts (casheph_account_t *account, gzFile file)
 }
 
 void
+casheph_write_slot (const char *indent, casheph_slot_t *slot, gzFile file)
+{
+  gzprintf (file, "%s<slot>\n", indent);
+  gzprintf (file, "%s  <slot:key>%s</slot:key>\n", indent, slot->key);
+  casheph_gdate_t *date;
+  casheph_frame_t *frame;
+  int i;
+  char nextindent[128];
+  strcpy (nextindent, indent);
+  strcat (nextindent, "    ");
+  switch (slot->type)
+    {
+    case ce_gdate:
+      date = (casheph_gdate_t*)slot->value;
+      gzprintf (file, "%s  <slot:value type=\"gdate\">\n", indent);
+      gzprintf (file, "%s    <gdate>%04d-%02d-%02d</gdate>\n", indent,
+                date->year, date->month, date->day);
+      gzprintf (file, "%s  </slot:value>\n", indent);
+      break;
+    case ce_numeric:
+      gzprintf (file, "%s  <slot:value type=\"numeric\">%d/%d</slot:value>\n",
+                indent,
+                *((uint64_t*)slot->value) & 0xFFFFFFFF,
+                (int32_t)(*((uint64_t*)slot->value) >> 32));
+      break;
+    case ce_guid:
+      gzprintf (file, "%s  <slot:value type=\"guid\">%s</slot:value>\n", indent, (char*)slot->value);
+      break;
+    case ce_string:
+      gzprintf (file, "%s  <slot:value type=\"string\">%s</slot:value>\n", indent, (char*)slot->value);
+      break;
+    case ce_frame:
+      frame = (casheph_frame_t*)slot->value;
+      gzprintf (file, "%s  <slot:value type=\"frame\">\n", indent);
+      for (i = 0; i < frame->n_slots; ++i)
+        {
+          casheph_write_slot (nextindent, frame->slots[i], file);
+        }
+      gzprintf (file, "%s  </slot:value>\n", indent);
+      break;
+    }
+  gzprintf (file, "%s</slot>\n", indent);
+}
+
+casheph_slot_t *
+casheph_trn_get_slot (casheph_transaction_t *trn, const char *key)
+{
+  int i;
+  for (i = 0; i < trn->n_slots; ++i)
+    {
+      if (strcmp (trn->slots[i]->key, key) == 0)
+        {
+          return trn->slots[i];
+        }
+    }
+  return NULL;
+}
+
+void
 casheph_write_transaction (casheph_transaction_t *trn, gzFile file)
 {
   gzputs (file, "<gnc:transaction version=\"2.0.0\">\n");
@@ -901,7 +1183,7 @@ casheph_write_transaction (casheph_transaction_t *trn, gzFile file)
   gzprintf (file, "  </trn:currency>\n");
   gzprintf (file, "  <trn:date-posted>\n");
   struct tm *tm = localtime (&trn->date_posted);
-  int hrs_off = timezone / 3600;
+  int hrs_off = timezone / 3600 - tm->tm_isdst;
   int mins_off = (timezone / 60) % 60;
   char sign = '+';
   if (timezone > 0)
@@ -914,6 +1196,13 @@ casheph_write_transaction (casheph_transaction_t *trn, gzFile file)
   gzprintf (file, "  </trn:date-posted>\n");
   gzprintf (file, "  <trn:date-entered>\n");
   tm = localtime (&trn->date_entered);
+  hrs_off = timezone / 3600 - tm->tm_isdst;
+  mins_off = (timezone / 60) % 60;
+  sign = '+';
+  if (timezone > 0)
+    {
+      sign = '-';
+    }
   strftime (buf, 1024, "%Y-%m-%d %H:%M:%S", tm);
   gzprintf (file, "    <ts:date>%s %c%02d%02d</ts:date>\n", buf, sign, hrs_off, mins_off);
   gzprintf (file, "  </trn:date-entered>\n");
@@ -924,17 +1213,7 @@ casheph_write_transaction (casheph_transaction_t *trn, gzFile file)
       int i;
       for (i = 0; i < trn->n_slots; ++i)
         {
-          gzprintf (file, "    <slot>\n");
-          gzprintf (file, "      <slot:key>%s</slot:key>\n", trn->slots[i]->key);
-          if (trn->slots[i]->type == ce_gdate)
-            {
-              casheph_gdate_t *date = (casheph_gdate_t*)trn->slots[i]->value;
-              gzprintf (file, "      <slot:value type=\"gdate\">\n");
-              gzprintf (file, "        <gdate>%04d-%02d-%02d</gdate>\n",
-                        date->year, date->month, date->day);
-              gzprintf (file, "      </slot:value>\n");
-            }
-          gzprintf (file, "    </slot>\n");
+          casheph_write_slot ("    ", trn->slots[i], file);
         }
       gzprintf (file, "  </trn:slots>\n");
     }
@@ -947,14 +1226,106 @@ casheph_write_transaction (casheph_transaction_t *trn, gzFile file)
           gzprintf (file, "    <trn:split>\n");
           gzprintf (file, "      <split:id type=\"guid\">%s</split:id>\n", trn->splits[i]->id);
           gzprintf (file, "      <split:reconciled-state>%s</split:reconciled-state>\n", trn->splits[i]->reconciled_state);
-          gzprintf (file, "      <split:value>%d/100</split:value>\n", trn->splits[i]->value);
-          gzprintf (file, "      <split:quantity>%d/100</split:quantity>\n", trn->splits[i]->value);
+          gzprintf (file, "      <split:value>%d/%d</split:value>\n",
+                    trn->splits[i]->value & 0xFFFFFFFF,
+                    (int32_t)(trn->splits[i]->value >> 32));
+          gzprintf (file, "      <split:quantity>%d/%d</split:quantity>\n",
+                    trn->splits[i]->quantity & 0xFFFFFFFF,
+                    (int32_t)(trn->splits[i]->quantity >> 32));
           gzprintf (file, "      <split:account type=\"guid\">%s</split:account>\n", trn->splits[i]->account);
+          if (trn->splits[i]->n_slots > 0)
+            {
+              gzprintf (file, "      <split:slots>\n");
+              int j;
+              for (j = 0; j < trn->splits[i]->n_slots; ++j)
+                {
+                  casheph_write_slot ("        ", trn->splits[i]->slots[j], file);
+                }
+              gzprintf (file, "      </split:slots>\n");
+            }
           gzprintf (file, "    </trn:split>\n");
         }
       gzprintf (file, "  </trn:splits>\n");
     }
   gzputs (file, "</gnc:transaction>\n");
+}
+
+void
+casheph_write_recurrence (casheph_recurrence_t *recurrence, gzFile file)
+{
+  gzputs (file, "    <gnc:recurrence version=\"1.0.0\">\n");
+  gzprintf (file, "      <recurrence:mult>%d</recurrence:mult>\n",
+            recurrence->mult);
+  gzprintf (file, "      <recurrence:period_type>%s</recurrence:period_type>\n",
+            recurrence->period_type);
+  gzputs (file, "      <recurrence:start>\n");
+  gzprintf (file, "        <gdate>%04d-%02d-%02d</gdate>\n",
+            recurrence->start->year,
+            recurrence->start->month,
+            recurrence->start->day);
+  gzputs (file, "      </recurrence:start>\n");
+  if (recurrence->weekend_adj != NULL)
+    {
+      gzprintf (file, "      <recurrence:weekend_adj>%s</recurrence:weekend_adj>\n",
+                recurrence->weekend_adj);
+    }
+  gzputs (file, "    </gnc:recurrence>\n");
+}
+
+void
+casheph_write_schedule (casheph_schedule_t *schedule, gzFile file)
+{
+  gzputs (file, "  <sx:schedule>\n");
+  int i;
+  for (i = 0; i < schedule->n_recurrences; ++i)
+    {
+      casheph_write_recurrence (schedule->recurrences[i], file);
+    }
+  gzputs (file, "  </sx:schedule>\n");
+}
+
+void
+casheph_write_schedxaction (casheph_schedxaction_t *sx, gzFile file)
+{
+  gzputs (file, "<gnc:schedxaction version=\"2.0.0\">\n");
+  gzprintf (file, "  <sx:id type=\"guid\">%s</sx:id>\n",
+            sx->id);
+  gzprintf (file, "  <sx:name>%s</sx:name>\n",
+            sx->name);
+  gzprintf (file, "  <sx:enabled>%c</sx:enabled>\n",
+            (sx->enabled?'y':'n'));
+  gzprintf (file, "  <sx:autoCreate>%c</sx:autoCreate>\n",
+            (sx->auto_create?'y':'n'));
+  gzprintf (file, "  <sx:autoCreateNotify>%c</sx:autoCreateNotify>\n",
+            (sx->auto_create_notify?'y':'n'));
+  gzprintf (file, "  <sx:advanceCreateDays>%d</sx:advanceCreateDays>\n",
+            sx->advance_create_days);
+  gzprintf (file, "  <sx:advanceRemindDays>%d</sx:advanceRemindDays>\n",
+            sx->advance_remind_days);
+  gzprintf (file, "  <sx:instanceCount>%d</sx:instanceCount>\n",
+            sx->instance_count);
+  if (sx->start != NULL)
+    {
+      gzputs (file, "  <sx:start>\n");
+      gzprintf (file, "    <gdate>%04d-%02d-%02d</gdate>\n",
+                sx->start->year,
+                sx->start->month,
+                sx->start->day);
+      gzputs (file, "  </sx:start>\n");
+    }
+  if (sx->last != NULL)
+    {
+      gzputs (file, "  <sx:last>\n");
+      gzprintf (file, "    <gdate>%04d-%02d-%02d</gdate>\n",
+                sx->last->year,
+                sx->last->month,
+                sx->last->day);
+      gzputs (file, "  </sx:last>\n");
+    }
+  gzprintf (file, "  <sx:templ-acct type=\"guid\">%s</sx:templ-acct>\n",
+            sx->templ_acct);
+  casheph_write_schedule (sx->schedule, file);
+  gzputs (file, "</gnc:schedxaction>\n");
 }
 
 void
@@ -967,10 +1338,30 @@ casheph_write_transactions (casheph_t *ce, gzFile file)
     }
 }
 
-long
+void
+casheph_write_schedxactions (casheph_t *ce, gzFile file)
+{
+  int i;
+  for (i = 0; i < ce->n_schedxactions; ++i)
+    {
+      casheph_write_schedxaction (ce->schedxactions[i], file);
+    }
+}
+
+void
+casheph_write_template_transactions (casheph_t *ce, gzFile file)
+{
+  int i;
+  for (i = 0; i < ce->n_template_transactions; ++i)
+    {
+      casheph_write_transaction (ce->template_transactions[i], file);
+    }
+}
+
+uint64_t
 casheph_trn_value_for_act (casheph_transaction_t *trn, casheph_account_t *act)
 {
-  long val = 0;
+  uint64_t val = 0;
   int i;
   for (i = 0; i < trn->n_splits; ++i)
     {
@@ -1026,6 +1417,11 @@ casheph_save (casheph_t *ce, const char *filename)
             casheph_count_accounts (ce));
   gzprintf (file, "<gnc:count-data cd:type=\"transaction\">%d</gnc:count-data>\n",
             ce->n_transactions);
+  if (ce->n_template_transactions > 0)
+    {
+      gzprintf (file, "<gnc:count-data cd:type=\"schedxaction\">%d</gnc:count-data>\n",
+                ce->n_template_transactions);
+    }
   gzputs (file, "<gnc:commodity version=\"2.0.0\">\n\
   <cmdty:space>ISO4217</cmdty:space>\n\
   <cmdty:id>USD</cmdty:id>\n\
@@ -1043,6 +1439,15 @@ casheph_save (casheph_t *ce, const char *filename)
 
   casheph_write_accounts (ce->root, file);
   casheph_write_transactions (ce, file);
+
+  if (ce->n_template_transactions > 0)
+    {
+      gzputs (file, "<gnc:template-transactions>\n");
+      casheph_write_accounts (ce->template_root, file);
+      casheph_write_template_transactions (ce, file);
+      gzputs (file, "</gnc:template-transactions>\n");
+      casheph_write_schedxactions (ce, file);
+    }
 
   gzputs (file, "</gnc:book>\n");
   gzputs (file, "</gnc-v2>\n");

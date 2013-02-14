@@ -19,6 +19,8 @@
 #define CASHEPH_H
 
 #include <time.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 #include "zlib.h"
 
@@ -38,6 +40,14 @@ typedef struct casheph_gdate_s casheph_gdate_t;
 
 typedef struct casheph_frame_s casheph_frame_t;
 
+typedef struct casheph_commodity_s casheph_commodity_t;
+
+typedef struct casheph_schedxaction_s casheph_schedxaction_t;
+
+typedef struct casheph_schedule_s casheph_schedule_t;
+
+typedef struct casheph_recurrence_s casheph_recurrence_t;
+
 struct casheph_s
 {
   casheph_account_t *root;
@@ -45,6 +55,8 @@ struct casheph_s
   casheph_transaction_t **transactions;
   int n_template_transactions;
   casheph_transaction_t **template_transactions;
+  int n_schedxactions;
+  casheph_schedxaction_t **schedxactions;
   casheph_account_t *template_root;
   char *book_id;
 };
@@ -60,6 +72,8 @@ struct casheph_account_s
   char *parent;
   int n_slots;
   casheph_slot_t **slots;
+  casheph_commodity_t *commodity;
+  int commodity_scu;
 };
 
 struct casheph_transaction_s
@@ -74,11 +88,28 @@ struct casheph_transaction_s
   casheph_slot_t **slots;
 };
 
+struct casheph_schedxaction_s
+{
+  char *id;
+  char *name;
+  bool enabled;
+  bool auto_create;
+  bool auto_create_notify;
+  int advance_create_days;
+  int advance_remind_days;
+  int instance_count;
+  casheph_gdate_t *start;
+  casheph_gdate_t *last;
+  char *templ_acct;
+  casheph_schedule_t *schedule;
+};
+
 struct casheph_split_s
 {
   char *id;
   char *reconciled_state;
-  long value;
+  uint64_t value;
+  uint64_t quantity;
   char *account;
   int n_slots;
   casheph_slot_t **slots;
@@ -102,6 +133,26 @@ struct casheph_gdate_s
   unsigned int year;
   unsigned int month;
   unsigned int day;
+};
+
+struct casheph_commodity_s
+{
+  char *space;
+  char *id;
+};
+
+struct casheph_schedule_s
+{
+  int n_recurrences;
+  casheph_recurrence_t **recurrences;
+};
+
+struct casheph_recurrence_s
+{
+  int mult;
+  char *period_type;
+  casheph_gdate_t *start;
+  char *weekend_adj;
 };
 
 casheph_t *casheph_open (const char *filename);
@@ -135,7 +186,7 @@ casheph_account_t *casheph_account_get_account_by_name (casheph_account_t *act,
 casheph_transaction_t *casheph_get_transaction (casheph_t *ce,
                                                 const char *id);
 
-long casheph_trn_value_for_act (casheph_transaction_t *t, casheph_account_t *act);
+uint64_t casheph_trn_value_for_act (casheph_transaction_t *t, casheph_account_t *act);
 
 void casheph_save (casheph_t *ce, const char *filename);
 
