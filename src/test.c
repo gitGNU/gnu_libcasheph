@@ -535,9 +535,13 @@ saving_produces_file_with_same_content ()
   system ("gunzip -c test.gnucash > test.gnucash.raw");
   system ("gunzip -c test.gnucash.saved > test.gnucash.saved.raw");
   int res = system ("diff test.gnucash.raw test.gnucash.saved.raw > test.gnucash.saved.diff");
-  system ("rm test.gnucash.saved");
-  system ("rm test.gnucash.raw");
-  system ("rm test.gnucash.saved.raw");
+  if (res == 0)
+    {
+      system ("rm test.gnucash.saved");
+      system ("rm test.gnucash.raw");
+      system ("rm test.gnucash.saved.raw");
+      system ("rm test.gnucash.saved.diff");
+    }
   return res == 0;
 }
 
@@ -550,9 +554,13 @@ saving_produces_file_with_same_content_2 ()
   system ("gunzip -c test2.gnucash > test2.gnucash.raw");
   system ("gunzip -c test2.gnucash.saved > test2.gnucash.saved.raw");
   int res = system ("diff test2.gnucash.raw test2.gnucash.saved.raw > test2.gnucash.saved.diff");
-  system ("rm test2.gnucash.saved");
-  system ("rm test2.gnucash.raw");
-  system ("rm test2.gnucash.saved.raw");
+  if (res == 0)
+    {
+      system ("rm test2.gnucash.saved");
+      system ("rm test2.gnucash.raw");
+      system ("rm test2.gnucash.saved.raw");
+      system ("rm test2.gnucash.saved.diff");
+    }
   return res == 0;
 }
 
@@ -595,9 +603,13 @@ saving_produces_file_with_same_content_3 ()
   system ("gunzip -c test3.gnucash > test3.gnucash.raw");
   system ("gunzip -c test3.gnucash.saved > test3.gnucash.saved.raw");
   int res = system ("diff test3.gnucash.raw test3.gnucash.saved.raw > test3.gnucash.saved.diff");
-  system ("rm test3.gnucash.saved");
-  system ("rm test3.gnucash.raw");
-  /* system ("rm test3.gnucash.saved.raw"); */
+  if (res == 0)
+    {
+      system ("rm test3.gnucash.saved");
+      system ("rm test3.gnucash.raw");
+      system ("rm test3.gnucash.saved.raw");
+      system ("rm test3.gnucash.saved.diff");
+    }
   return res == 0;
 }
 
