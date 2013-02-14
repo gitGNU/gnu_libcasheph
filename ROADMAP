@@ -18,15 +18,6 @@
 Roadmap
 -------
 
-0.0.5
------
-
-- Correctly parse and store slots of various types (guid, numeric, etc.)
-  including the "frame" which stores other slots
-
-- Be able to parse and save back a GnuCash file with template transactions
-  properly
-
 0.0.6
 -----
 
