@@ -324,14 +324,10 @@ casheph_parse_slot_value (void **value, casheph_slot_type_t *type, casheph_tag_t
           && strcmp ((*tag)->attributes[0]->val, "gdate") == 0)
         {
           *type = ce_gdate;
-          /* printf ("parsing gdate\n"); */
           *value = casheph_parse_gdate (file);
-          /* printf ("%d/%d/%d\n", date->month, date->day, date->year); */
-          /* printf ("destroying %s and getting a new one\n", slot_tag->name); */
           casheph_tag_destroy (*tag);
           *tag = casheph_parse_tag (file);
         }
-      /* printf ("<%s>\n", slot_tag->name); */
       else if ((*tag)->n_attributes > 0
                && strcmp ((*tag)->attributes[0]->key, "type") == 0
                && strcmp ((*tag)->attributes[0]->val, "string") == 0)
@@ -383,10 +379,7 @@ casheph_parse_slot_value (void **value, casheph_slot_type_t *type, casheph_tag_t
               *tag = casheph_parse_tag (file);
             }
           *value = frame;
-          /* casheph_tag_destroy (*tag); */
-          /* *tag = casheph_parse_tag (file); */
         }
-      /* printf ("slot_tag->name: %s\n", slot_tag->name); */
       if (strcmp ((*tag)->name, "/slot:value") != 0)
         {
           fprintf (stderr, "Couldn't find matching </slot:value>\n");
