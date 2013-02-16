@@ -689,7 +689,7 @@ casheph_parse_date_field (time_t *date, casheph_tag_t **tag,
           memset (&tm, 0, sizeof (struct tm));
           strptime (date_str, "%Y-%m-%d %H:%M:%S", &tm);
           (*date) = mktime (&tm);
-          (*date) += tm.tm_gmtoff;
+          (*date) += tm.tm_gmtoff - (tm.tm_isdst * 3600);
           int minutes_to_add = date_str[24] - '0'
             + (date_str[23] - '0') * 10
             + (date_str[22] - '0') * 60

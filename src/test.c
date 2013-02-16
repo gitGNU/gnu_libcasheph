@@ -614,6 +614,25 @@ saving_produces_file_with_same_content_3 ()
 }
 
 bool
+saving_produces_file_with_same_content_4 ()
+{
+  casheph_t *ce = casheph_open ("test4.gnucash");
+  setenv ("TZ", "America/New_York", 1);
+  casheph_save (ce, "test4.gnucash.saved");
+  system ("gunzip -c test4.gnucash > test4.gnucash.raw");
+  system ("gunzip -c test4.gnucash.saved > test4.gnucash.saved.raw");
+  int res = system ("diff test4.gnucash.raw test4.gnucash.saved.raw > test4.gnucash.saved.diff");
+  if (res == 0)
+    {
+      system ("rm test4.gnucash.saved");
+      system ("rm test4.gnucash.raw");
+      system ("rm test4.gnucash.saved.raw");
+      system ("rm test4.gnucash.saved.diff");
+    }
+  return res == 0;
+}
+
+bool
 test3_template_trn_splits_have_frame_slots_with_5_slots ()
 {
   casheph_t *ce = casheph_open ("test3.gnucash");
@@ -730,5 +749,7 @@ main (int argc, char *argv[])
            "test3.gnucash template trn splits have frame slots with 5 slots");
   CE_TEST (res, saving_produces_file_with_same_content_3,
            "Saving produces a file with the same content [test3.gnucash]");
+  CE_TEST (res, saving_produces_file_with_same_content_4,
+           "Saving produces a file with the same content [test4.gnucash]");
   return res?0:1;
 }
