@@ -614,6 +614,25 @@ saving_produces_file_with_same_content_3 ()
 }
 
 bool
+saving_produces_file_with_same_content_eric ()
+{
+  casheph_t *ce = casheph_open ("/home/eric/eric.gnucash");
+  setenv ("TZ", "America/New_York", 1);
+  casheph_save (ce, "eric.gnucash.saved");
+  system ("gunzip -c /home/eric/eric.gnucash > eric.gnucash.raw");
+  system ("gunzip -c eric.gnucash.saved > eric.gnucash.saved.raw");
+  int res = system ("diff eric.gnucash.raw eric.gnucash.saved.raw > eric.gnucash.saved.diff");
+  if (res == 0)
+    {
+      system ("rm eric.gnucash.saved");
+      system ("rm eric.gnucash.raw");
+      system ("rm eric.gnucash.saved.raw");
+      system ("rm eric.gnucash.saved.diff");
+    }
+  return res == 0;
+}
+
+bool
 saving_produces_file_with_same_content_4 ()
 {
   casheph_t *ce = casheph_open ("test4.gnucash");
@@ -751,5 +770,7 @@ main (int argc, char *argv[])
            "Saving produces a file with the same content [test3.gnucash]");
   CE_TEST (res, saving_produces_file_with_same_content_4,
            "Saving produces a file with the same content [test4.gnucash]");
+  CE_TEST (res, saving_produces_file_with_same_content_eric,
+           "Saving produces a file with the same content [eric.gnucash]");
   return res?0:1;
 }

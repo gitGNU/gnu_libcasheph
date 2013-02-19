@@ -22,6 +22,7 @@ dist_noinst_DATA = \
  ROADMAP \
  test.gnucash \
  test2.gnucash \
+ test3.gnucash \
  test3.gnucash
 
 check:
