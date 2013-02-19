@@ -23,7 +23,7 @@ dist_noinst_DATA = \
  test.gnucash \
  test2.gnucash \
  test3.gnucash \
- test3.gnucash
+ test4.gnucash
 
 check:
 	src/test
