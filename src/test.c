@@ -418,27 +418,32 @@ transaction_values_for_checking ()
 
   casheph_transaction_t *t;
   t = casheph_get_transaction (ce, "b83f85a497dfb3f1d8db4c26489f57d9");
-if (casheph_trn_value_for_act (t, checking) != ((uint64_t)100 << 32 | (uint32_t)20000))
+  if (casheph_trn_value_for_act (t, checking)->n != 20000
+      || casheph_trn_value_for_act (t, checking)->d != 100)
     {
       return false;
     }
   t = casheph_get_transaction (ce, "75fe0a336df6675568885a8cd7c582a8");
-  if (casheph_trn_value_for_act (t, checking) != ((uint64_t)100 << 32 | (uint32_t)-3214))
+  if (casheph_trn_value_for_act (t, checking)->n != -3214
+      || casheph_trn_value_for_act (t, checking)->d != 100)
     {
       return false;
     }
   t = casheph_get_transaction (ce, "26d5b26ad0b23fd822f2c63a6e1084e0");
-  if (casheph_trn_value_for_act (t, checking) != ((uint64_t)100 << 32 | (uint32_t)-4823))
+  if (casheph_trn_value_for_act (t, checking)->n != -4823
+      || casheph_trn_value_for_act (t, checking)->d != 100)
     {
       return false;
     }
   t = casheph_get_transaction (ce, "b1bac36e34d568e6363a81f2f61af197");
-  if (casheph_trn_value_for_act (t, checking) != ((uint64_t)100 << 32 | (uint32_t)500279))
+  if (casheph_trn_value_for_act (t, checking)->n != 500279
+      || casheph_trn_value_for_act (t, checking)->d != 100)
     {
       return false;
     }
   t = casheph_get_transaction (ce, "2205e761a5c5abbc66f34be4e212e457");
-  if (casheph_trn_value_for_act (t, checking) != ((uint64_t)100 << 32 | (uint32_t)-312766))
+  if (casheph_trn_value_for_act (t, checking)->n != -312766
+      || casheph_trn_value_for_act (t, checking)->d != 100)
     {
       return false;
     }
@@ -672,7 +677,8 @@ test3_template_trn_splits_have_frame_slots_with_5_slots ()
     }
   if (frame->slots[2]->type != ce_numeric
       || strcmp ("credit-numeric", frame->slots[2]->key) != 0
-      || *((uint64_t*)frame->slots[2]->value) != (((uint64_t)1 << 32) | (uint32_t)2000))
+      || ((casheph_val_t*)frame->slots[2]->value)->n != 2000
+      || ((casheph_val_t*)frame->slots[2]->value)->d != 1)
     {
       return false;
     }
@@ -684,7 +690,8 @@ test3_template_trn_splits_have_frame_slots_with_5_slots ()
     }
   if (frame->slots[4]->type != ce_numeric
       || strcmp ("debit-numeric", frame->slots[4]->key)
-      || *((uint64_t*)frame->slots[4]->value) != ((uint64_t)1 << 32 | (uint32_t)0))
+      || ((casheph_val_t*)frame->slots[4]->value)->n != 0
+      || ((casheph_val_t*)frame->slots[4]->value)->d != 1)
     {
       return false;
     }

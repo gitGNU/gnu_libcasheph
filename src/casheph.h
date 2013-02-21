@@ -48,6 +48,14 @@ typedef struct casheph_schedule_s casheph_schedule_t;
 
 typedef struct casheph_recurrence_s casheph_recurrence_t;
 
+typedef struct casheph_val_s casheph_val_t;
+
+struct casheph_val_s
+{
+  int32_t n;
+  uint32_t d;
+};
+
 struct casheph_s
 {
   casheph_account_t *root;
@@ -108,8 +116,8 @@ struct casheph_split_s
 {
   char *id;
   char *reconciled_state;
-  uint64_t value;
-  uint64_t quantity;
+  casheph_val_t *value;
+  casheph_val_t *quantity;
   char *account;
   int n_slots;
   casheph_slot_t **slots;
@@ -186,7 +194,7 @@ casheph_account_t *casheph_account_get_account_by_name (casheph_account_t *act,
 casheph_transaction_t *casheph_get_transaction (casheph_t *ce,
                                                 const char *id);
 
-uint64_t casheph_trn_value_for_act (casheph_transaction_t *t, casheph_account_t *act);
+casheph_val_t *casheph_trn_value_for_act (casheph_transaction_t *t, casheph_account_t *act);
 
 void casheph_save (casheph_t *ce, const char *filename);
 

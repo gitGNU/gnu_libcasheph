@@ -285,10 +285,10 @@ casheph_parse_gdate (gzFile file)
   return date;
 }
 
-uint64_t
+casheph_val_t *
 casheph_parse_value_str (const char *str)
 {
-  uint64_t val;
+  casheph_val_t *val = (casheph_val_t*)malloc (sizeof (casheph_val_t));
   int slash_index = -1;
   int i;
   for (i = 0; i < strlen (str); ++i)
@@ -303,13 +303,14 @@ casheph_parse_value_str (const char *str)
     {
       int32_t n;
       uint32_t d;
-      sscanf (str, "%d/%d", &n, &d);
-      val = ((uint64_t)d << 32) | (uint32_t)n;
+      sscanf (str, "%d/%u", &n, &d);
+      val->n = n;
+      val->d = d;
     }
   else
     {
-      sscanf (str, "%ld", &val);
-      val *= 100;
+      val->d = 1;
+      sscanf (str, "%d", &(val->n));
     }
   return val;
 }
@@ -354,8 +355,7 @@ casheph_parse_slot_value (void **value, casheph_slot_type_t *type, casheph_tag_t
         {
           *type = ce_numeric;
           char *buf = casheph_parse_text (file);
-          *value = (long*)malloc (sizeof (long));
-          *((long*)*value) = casheph_parse_value_str (buf);
+          *value = casheph_parse_value_str (buf);
           free (buf);
           casheph_tag_destroy (*tag);
           *tag = casheph_parse_tag (file);
@@ -598,7 +598,7 @@ casheph_parse_split_contents (gzFile file)
       if (split_tag != NULL && strcmp (split_tag->name, "split:value") == 0)
         {
           char *buf = casheph_parse_text (file);
-          uint64_t val = casheph_parse_value_str (buf);
+          casheph_val_t *val = casheph_parse_value_str (buf);
           split->value = val;
           casheph_tag_destroy (split_tag);
           split_tag = casheph_parse_tag (file);
@@ -611,7 +611,7 @@ casheph_parse_split_contents (gzFile file)
       if (split_tag != NULL && strcmp (split_tag->name, "split:quantity") == 0)
         {
           char *buf = casheph_parse_text (file);
-          uint64_t val = casheph_parse_value_str (buf);
+          casheph_val_t *val = casheph_parse_value_str (buf);
           split->quantity = val;
           casheph_tag_destroy (split_tag);
           split_tag = casheph_parse_tag (file);
@@ -1129,8 +1129,8 @@ casheph_write_slot (const char *indent, casheph_slot_t *slot, gzFile file)
     case ce_numeric:
       gzprintf (file, "%s  <slot:value type=\"numeric\">%d/%d</slot:value>\n",
                 indent,
-                *((uint64_t*)slot->value) & 0xFFFFFFFF,
-                (int32_t)(*((uint64_t*)slot->value) >> 32));
+                ((casheph_val_t*)slot->value)->n,
+                ((casheph_val_t*)slot->value)->d);
       break;
     case ce_guid:
       gzprintf (file, "%s  <slot:value type=\"guid\">%s</slot:value>\n", indent, (char*)slot->value);
@@ -1219,12 +1219,14 @@ casheph_write_transaction (casheph_transaction_t *trn, gzFile file)
           gzprintf (file, "    <trn:split>\n");
           gzprintf (file, "      <split:id type=\"guid\">%s</split:id>\n", trn->splits[i]->id);
           gzprintf (file, "      <split:reconciled-state>%s</split:reconciled-state>\n", trn->splits[i]->reconciled_state);
-          gzprintf (file, "      <split:value>%d/%d</split:value>\n",
-                    trn->splits[i]->value & 0xFFFFFFFF,
-                    (int32_t)(trn->splits[i]->value >> 32));
-          gzprintf (file, "      <split:quantity>%d/%d</split:quantity>\n",
-                    trn->splits[i]->quantity & 0xFFFFFFFF,
-                    (int32_t)(trn->splits[i]->quantity >> 32));
+          casheph_val_t *val = trn->splits[i]->value;
+          int32_t n = val->n;
+          uint32_t d = val->d;
+          gzprintf (file, "      <split:value>%d/%d</split:value>\n", n, d);
+          val = trn->splits[i]->quantity;
+          n = val->n;
+          d = val->d;
+          gzprintf (file, "      <split:quantity>%d/%d</split:quantity>\n", n, d);
           gzprintf (file, "      <split:account type=\"guid\">%s</split:account>\n", trn->splits[i]->account);
           if (trn->splits[i]->n_slots > 0)
             {
@@ -1351,10 +1353,10 @@ casheph_write_template_transactions (casheph_t *ce, gzFile file)
     }
 }
 
-uint64_t
+casheph_val_t *
 casheph_trn_value_for_act (casheph_transaction_t *trn, casheph_account_t *act)
 {
-  uint64_t val = 0;
+  casheph_val_t *val = NULL;
   int i;
   for (i = 0; i < trn->n_splits; ++i)
     {
