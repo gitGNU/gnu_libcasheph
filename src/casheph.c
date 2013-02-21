@@ -1452,3 +1452,107 @@ casheph_save (casheph_t *ce, const char *filename)
   gzputs (file, "<!-- End:             -->\n");
   gzclose (file);
 }
+
+void
+casheph_val_destroy (casheph_val_t *v)
+{
+  free (v);
+}
+
+void
+casheph_frame_destroy (casheph_frame_t *f)
+{
+  int i;
+  for (i = 0; i < f->n_slots; ++i)
+    {
+      casheph_slot_destroy (f->slots[i]);
+    }
+  free (f->slots);
+  free (f);
+}
+
+void
+casheph_slot_destroy (casheph_slot_t *s)
+{
+  free (s->key);
+  switch (s->type)
+    {
+    case ce_gdate:
+      free (s->value);
+      break;
+    case ce_string:
+      free (s->value);
+      break;
+    case ce_guid:
+      free (s->value);
+      break;
+    case ce_numeric:
+      casheph_val_destroy (s->value);
+      break;
+    case ce_frame:
+      casheph_frame_destroy (s->value);
+      break;
+    }
+  free (s);
+}
+
+void
+casheph_split_destroy (casheph_split_t *s)
+{
+  free (s->id);
+  free (s->reconciled_state);
+  casheph_val_destroy (s->value);
+  casheph_val_destroy (s->quantity);
+  free (s->account);
+  int i;
+  for (i = 0; i < s->n_slots; ++i)
+    {
+      casheph_slot_destroy (s->slots[i]);
+    }
+  free (s->slots);
+  free (s);
+}
+
+void
+casheph_trn_destroy (casheph_transaction_t *t)
+{
+  free (t->id);
+  free (t->desc);
+  int i;
+  for (i = 0; i < t->n_splits; ++i)
+    {
+      casheph_split_destroy (t->splits[i]);
+    }
+  free (t->splits);
+  for (i = 0; i < t->n_slots; ++i)
+    {
+      casheph_slot_destroy (t->slots[i]);
+    }
+  free (t->slots);
+  free (t);
+}
+
+void
+casheph_remove_trn (casheph_t *ce, const char *id)
+{
+  int index = -1;
+  int i;
+  for (i = 0; i < ce->n_transactions; ++i)
+    {
+      if (strcmp (ce->transactions[i]->id, id) == 0)
+        {
+          index = i;
+          break;
+        }
+    }
+  if (index >= 0)
+    {
+      casheph_trn_destroy (ce->transactions[index]);
+      int j;
+      for (j = index; j < ce->n_transactions - 1; ++j)
+        {
+          ce->transactions[j] = ce->transactions[j + 1];
+        }
+      --ce->n_transactions;
+    }
+}

@@ -698,6 +698,26 @@ test3_template_trn_splits_have_frame_slots_with_5_slots ()
   return true;
 }
 
+bool
+removing_trn_by_id_works ()
+{
+  casheph_t *ce = casheph_open ("test.gnucash");
+  if (ce->n_transactions != 5)
+    {
+      return false;
+    }
+  casheph_remove_trn (ce, "b83f85a497dfb3f1d8db4c26489f57d9");
+  if (ce->n_transactions != 4)
+    {
+      return false;
+    }
+  return (!casheph_get_transaction (ce, "b83f85a497dfb3f1d8db4c26489f57d9")
+          && casheph_get_transaction (ce, "75fe0a336df6675568885a8cd7c582a8")
+          && casheph_get_transaction (ce, "26d5b26ad0b23fd822f2c63a6e1084e0")
+          && casheph_get_transaction (ce, "b1bac36e34d568e6363a81f2f61af197")
+          && casheph_get_transaction (ce, "2205e761a5c5abbc66f34be4e212e457"));
+}
+
 #define CE_TEST(r, f, s) r = r && test (f, s)
 
 int
@@ -758,5 +778,7 @@ main (int argc, char *argv[])
            "Saving produces a file with the same content [test3.gnucash]");
   CE_TEST (res, saving_produces_file_with_same_content_4,
            "Saving produces a file with the same content [test4.gnucash]");
+  CE_TEST (res, removing_trn_by_id_works,
+           "Removing transactions by ID works [test.gnucash]");
   return res?0:1;
 }
