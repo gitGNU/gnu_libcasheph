@@ -18,12 +18,12 @@
 Roadmap
 -------
 
-0.0.6
+0.0.7
 -----
 
 - Remove transaction from account, (by ID)
 
-0.0.7
+0.0.8
 -----
 
 - Add a transaction to an account, given another account, desc, date, etc.
