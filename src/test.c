@@ -774,6 +774,16 @@ adding_simple_trn ()
   return true;
 }
 
+bool
+get_account_by_id ()
+{
+  casheph_t *ce = casheph_open ("test.gnucash");
+  casheph_account_t *act = casheph_get_account (ce, "5c40e1bcbf05128a9dd754c76e9fe959");
+  if (act == NULL) return false;
+  if (strcmp (act->name, "Checking Account") != 0) return false;
+  return true;
+}
+
 #define CE_TEST(r, f, s) r = r && test (f, s)
 
 int
@@ -838,5 +848,7 @@ main (int argc, char *argv[])
            "Removing transactions by ID works [test.gnucash]");
   CE_TEST (res, adding_simple_trn,
            "Adding a simple transaction (A->B) works [test.gnucash]");
+  CE_TEST (res, get_account_by_id,
+           "You can retrieve an account by ID [test.gnucash]");
   return res?0:1;
 }

@@ -1643,3 +1643,28 @@ casheph_add_simple_trn (casheph_t *ce, casheph_account_t *from,
   ce->transactions[ce->n_transactions - 1] = trn;
   return trn;
 }
+
+casheph_account_t *
+casheph_get_account_rec (casheph_account_t *act, const char *id)
+{
+  if (strcmp (act->id, id) == 0)
+    {
+      return act;
+    }
+  int i;
+  for (i = 0; i < act->n_accounts; ++i)
+    {
+      casheph_account_t *inner = casheph_get_account_rec (act->accounts[i], id);
+      if (inner != NULL)
+        {
+          return inner;
+        }
+    }
+  return NULL;
+}
+
+casheph_account_t *
+casheph_get_account (casheph_t *ce, const char *id)
+{
+  return casheph_get_account_rec (ce->root, id);
+}
