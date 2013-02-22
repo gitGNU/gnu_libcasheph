@@ -18,26 +18,6 @@
 Roadmap
 -------
 
-0.0.7
------
-
-- Remove transaction from account, (by ID)
-
-0.0.8
------
-
-- Add a transaction to an account, given another account, desc, date, etc.
-
-0.1.0
------
-
-- Save an opened GnuCash file back so that it matches what was read (a
-  bit for bit match)
-
-- Function for adding a transaction
-
-- Function for removing a transaction (by ID)
-
 0.2.0
 -----
 

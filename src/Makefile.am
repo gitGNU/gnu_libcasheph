@@ -25,4 +25,4 @@ libcasheph_la_SOURCES = casheph.c
 
 include_HEADERS = casheph.h
 
-libcasheph_la_LDFLAGS = -version-info 2:0:0
+libcasheph_la_LDFLAGS = -version-info 3:0:1
