@@ -718,6 +718,62 @@ removing_trn_by_id_works ()
           && casheph_get_transaction (ce, "2205e761a5c5abbc66f34be4e212e457"));
 }
 
+bool
+adding_simple_trn ()
+{
+  casheph_t *ce = casheph_open ("test.gnucash");
+  casheph_account_t *root = ce->root;
+  casheph_account_t *assets;
+  assets = casheph_account_get_account_by_name (root, "Assets");
+  casheph_account_t *cur_assets;
+  cur_assets = casheph_account_get_account_by_name (assets, "Current Assets");
+  casheph_account_t *checking;
+  checking = casheph_account_get_account_by_name (cur_assets, "Checking Account");
+  casheph_account_t *expenses;
+  expenses = casheph_account_get_account_by_name (root, "Expenses");
+  casheph_account_t *groceries;
+  groceries = casheph_account_get_account_by_name (expenses, "Groceries");
+  casheph_val_t *val = (casheph_val_t*)malloc (sizeof (casheph_val_t));
+  val->n = 20453;
+  val->d = 100;
+  casheph_gdate_t *date = (casheph_gdate_t*)malloc (sizeof (casheph_gdate_t));
+  date->year = 2013;
+  date->month = 2;
+  date->day = 22;
+  casheph_transaction_t *trn;
+  trn = casheph_add_simple_trn (ce, checking, groceries, date, val,
+                                "Bought some groceries");
+  if (trn == NULL)
+    {
+      return false;
+    }
+  if (ce->n_transactions != 6)
+    {
+      return false;
+    }
+  struct tm tm;
+  tm.tm_sec = tm.tm_min = tm.tm_hour = 0;
+  tm.tm_mday = 22;
+  tm.tm_mon = 1;
+  tm.tm_year = 113;
+  tm.tm_isdst = -1;
+  time_t t = mktime (&tm);
+  casheph_transaction_t *got_trn = casheph_get_transaction (ce, trn->id);
+  if (got_trn == NULL
+      || casheph_trn_value_for_act (got_trn, checking) == NULL
+      || casheph_trn_value_for_act (got_trn, groceries) == NULL
+      || casheph_trn_value_for_act (got_trn, checking)->n != -20453
+      || casheph_trn_value_for_act (got_trn, checking)->d != 100
+      || casheph_trn_value_for_act (got_trn, groceries)->n != 20453
+      || casheph_trn_value_for_act (got_trn, groceries)->d != 100
+      || strcmp (got_trn->desc, "Bought some groceries") != 0
+      || got_trn->date_posted != t)
+    {
+      return false;
+    }
+  return true;
+}
+
 #define CE_TEST(r, f, s) r = r && test (f, s)
 
 int
@@ -780,5 +836,7 @@ main (int argc, char *argv[])
            "Saving produces a file with the same content [test4.gnucash]");
   CE_TEST (res, removing_trn_by_id_works,
            "Removing transactions by ID works [test.gnucash]");
+  CE_TEST (res, adding_simple_trn,
+           "Adding a simple transaction (A->B) works [test.gnucash]");
   return res?0:1;
 }

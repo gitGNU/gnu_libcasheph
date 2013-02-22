@@ -1556,3 +1556,90 @@ casheph_remove_trn (casheph_t *ce, const char *id)
       --ce->n_transactions;
     }
 }
+
+char *
+make_guid ()
+{
+  char buf[2];
+  char *id = (char*)malloc (33);
+  int i;
+  for (i = 0; i < 32; ++i)
+    {
+      char v = rand () % 16;
+      sprintf (buf, "%x", v);
+      id[i] = buf[0];
+    }
+  return id;
+}
+
+casheph_val_t *
+casheph_copy_val (casheph_val_t *val)
+{
+  casheph_val_t *val_cpy = (casheph_val_t*)malloc (sizeof (casheph_val_t));
+  val_cpy->n = val->n;
+  val_cpy->d = val->d;
+  return val_cpy;
+}
+
+casheph_transaction_t *
+casheph_add_simple_trn (casheph_t *ce, casheph_account_t *from,
+                        casheph_account_t *to, casheph_gdate_t *date,
+                        casheph_val_t *val, const char *desc)
+{
+  srand (time (NULL));
+  casheph_transaction_t *trn;
+  trn = (casheph_transaction_t*)malloc (sizeof (casheph_transaction_t));
+  trn->id = make_guid ();
+  struct tm tm;
+  tm.tm_sec = tm.tm_min = tm.tm_hour = 0;
+  tm.tm_mday = date->day;
+  tm.tm_mon = date->month - 1;
+  tm.tm_year = date->year - 1900;
+  tm.tm_isdst = -1;
+  trn->date_posted = mktime (&tm);
+  trn->date_entered = time (NULL);
+  trn->desc = (char*)malloc (strlen (desc) + 1);
+  strcpy (trn->desc, desc);
+  trn->n_slots = 1;
+  trn->slots = (casheph_slot_t**)malloc (sizeof (casheph_slot_t*));
+  trn->slots[0] = (casheph_slot_t*)malloc (sizeof (casheph_slot_t));
+  trn->slots[0]->key = (char*)malloc (12);
+  strcpy (trn->slots[0]->key, "date-posted");
+  trn->slots[0]->type = ce_gdate;
+  casheph_gdate_t *date_cpy = (casheph_gdate_t*)malloc (sizeof (casheph_gdate_t));
+  date_cpy->year = date->year;
+  date_cpy->month = date->month;
+  date_cpy->day = date->day;
+  trn->slots[0]->value = date_cpy;
+  trn->n_splits = 2;
+  trn->splits = (casheph_split_t**)malloc (sizeof (casheph_split_t*) * 2);
+  trn->splits[0] = (casheph_split_t*)malloc (sizeof (casheph_split_t));
+  trn->splits[0]->id = make_guid ();
+  trn->splits[0]->reconciled_state = (char*)malloc (2);
+  strcpy (trn->splits[0]->reconciled_state, "n");
+  casheph_val_t *v0 = casheph_copy_val (val);
+  casheph_val_t *q0 = casheph_copy_val (val);
+  trn->splits[0]->value = v0;
+  trn->splits[0]->quantity = q0;
+  trn->splits[0]->account = (char*)malloc (strlen (to->id) + 1);
+  strcpy (trn->splits[0]->account, to->id);
+  trn->splits[0]->n_slots = 0;
+  trn->splits[0]->slots = NULL;
+
+  trn->splits[1] = (casheph_split_t*)malloc (sizeof (casheph_split_t));
+  trn->splits[1]->id = make_guid ();
+  trn->splits[1]->reconciled_state = (char*)malloc (2);
+  strcpy (trn->splits[1]->reconciled_state, "n");
+  casheph_val_t *v1 = casheph_copy_val (val);
+  v1->n *= -1;
+  casheph_val_t *q1 = casheph_copy_val (val);
+  trn->splits[1]->value = v1;
+  trn->splits[1]->quantity = q1;
+  trn->splits[1]->account = (char*)malloc (strlen (from->id) + 1);
+  strcpy (trn->splits[1]->account, from->id);
+  trn->splits[1]->n_slots = 0;
+  trn->splits[1]->slots = NULL;
+  ++ce->n_transactions;
+  ce->transactions[ce->n_transactions - 1] = trn;
+  return trn;
+}

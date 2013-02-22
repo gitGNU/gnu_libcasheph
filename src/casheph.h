@@ -196,6 +196,13 @@ casheph_transaction_t *casheph_get_transaction (casheph_t *ce,
 
 void casheph_remove_trn (casheph_t *ce, const char *id);
 
+casheph_transaction_t *casheph_add_simple_trn (casheph_t *ce,
+                                               casheph_account_t *from,
+                                               casheph_account_t *to,
+                                               casheph_gdate_t *date,
+                                               casheph_val_t *val,
+                                               const char *desc);
+
 casheph_val_t *casheph_trn_value_for_act (casheph_transaction_t *t, casheph_account_t *act);
 
 void casheph_save (casheph_t *ce, const char *filename);
