@@ -69,131 +69,6 @@ opening_gives_null_when_no_xml_dec ()
 }
 
 bool
-parsing_simple_tag ()
-{
-  FILE *file = fopen ("tagparse", "w");
-  fprintf (file, " \t\n <foo>\t  \n");
-  fclose (file);
-  system ("gzip -f tagparse");
-  system ("mv tagparse.gz tagparse.gnucash");
-  gzFile g_file = gzopen ("tagparse.gnucash", "r");
-  casheph_tag_t *tag = casheph_parse_tag (g_file);
-  gzclose (g_file);
-  system ("rm tagparse.gnucash");
-  return tag != NULL && strcmp (tag->name, "foo") == 0;
-}
-
-bool
-parsing_simple_tags ()
-{
-  FILE *file = fopen ("tagparse", "w");
-  fprintf (file, " \t\n <foo>\t <bar>\r <blah>\t \n  <hello> \n");
-  fclose (file);
-  system ("gzip -f tagparse");
-  system ("mv tagparse.gz tagparse.gnucash");
-  gzFile g_file = gzopen ("tagparse.gnucash", "r");
-  casheph_tag_t *tag = casheph_parse_tag (g_file);
-  if (tag == NULL || strcmp (tag->name, "foo") != 0)
-    {
-      return false;
-    }
-  casheph_tag_destroy (tag);
-  tag = casheph_parse_tag (g_file);
-  if (tag == NULL || strcmp (tag->name, "bar") != 0)
-    {
-      return false;
-    }
-  casheph_tag_destroy (tag);
-  tag = casheph_parse_tag (g_file);
-  if (tag == NULL || strcmp (tag->name, "blah") != 0)
-    {
-      return false;
-    }
-  casheph_tag_destroy (tag);
-  tag = casheph_parse_tag (g_file);
-  if (tag == NULL || strcmp (tag->name, "hello") != 0)
-    {
-      return false;
-    }
-  casheph_tag_destroy (tag);
-  gzclose (g_file);
-  system ("rm tagparse.gnucash");
-  return true;
-}
-
-bool
-parsing_tag_with_attributes ()
-{
-  FILE *file = fopen ("tagparse", "w");
-  fprintf (file, " \t\n <%s \t \r\n %s=\"%s\"\t  \r\n %s \t =\n \"%s\">\t\n",
-           "foo",
-           "hello",
-           "world",
-           "blah",
-           "blah2");
-  fclose (file);
-  system ("gzip -f tagparse");
-  system ("mv tagparse.gz tagparse.gnucash");
-  gzFile g_file = gzopen ("tagparse.gnucash", "r");
-  casheph_tag_t *tag = casheph_parse_tag (g_file);
-  gzclose (g_file);
-  bool good = false;
-  if (tag != NULL && strcmp (tag->name, "foo") == 0 && tag->n_attributes == 2
-      && strcmp (tag->attributes[0]->key, "hello") == 0
-      && strcmp (tag->attributes[0]->val, "world") == 0
-      && strcmp (tag->attributes[1]->key, "blah") == 0
-      && strcmp (tag->attributes[1]->val, "blah2") == 0)
-    {
-      good = true;
-    }
-  casheph_tag_destroy (tag);
-  system ("rm tagparse.gnucash");
-  return good;
-}
-
-bool
-parsing_attribute ()
-{
-  FILE *file = fopen ("attparse", "w");
-  fprintf (file, " \t\n foo=\"bar\"\t  \r\n hello \t =\n 'world'>\t\n");
-  fclose (file);
-  system ("gzip -f attparse");
-  system ("mv attparse.gz attparse.gnucash");
-  gzFile g_file = gzopen ("attparse.gnucash", "r");
-  casheph_attribute_t *att = casheph_parse_attribute (g_file);
-  if (att == NULL
-      || strcmp (att->key, "foo") != 0
-      || strcmp (att->val, "bar") != 0)
-    {
-      free (att->key);
-      free (att->val);
-      free (att);
-      gzclose (g_file);
-      return false;
-    }
-  free (att->key);
-  free (att->val);
-  free (att);
-  att = casheph_parse_attribute (g_file);
-  if (att == NULL
-      || strcmp (att->key, "hello") != 0
-      || strcmp (att->val, "world") != 0)
-    {
-      free (att->key);
-      free (att->val);
-      free (att);
-      gzclose (g_file);
-      return false;
-    }
-  free (att->key);
-  free (att->val);
-  free (att);
-  gzclose (g_file);
-  system ("rm attparse.gnucash");
-  return true;
-}
-
-bool
 root_account_id ()
 {
   casheph_t *ce = casheph_open ("test.gnucash");
@@ -796,14 +671,8 @@ main (int argc, char *argv[])
            "Opening gives NULL when not found");
   CE_TEST (res, opening_gives_null_when_no_xml_dec,
            "Opening gives NULL when there is no XML declaration");
-  CE_TEST (res, parsing_simple_tag,
-           "Parsing a simple XML tag works");
-  CE_TEST (res, parsing_simple_tags,
-           "Parsing multiple simple XML tags in a row works");
-  CE_TEST (res, parsing_attribute,
-           "Parsing tag attributes (alone) works");
-  CE_TEST (res, parsing_tag_with_attributes,
-           "Parsing a tag with attributes works");
+  CE_TEST (res, book_id_is_correct,
+           "The book id is correct [test.gnucash]");
   CE_TEST (res, root_account_id,
            "The correct root account ID is detected [test.gnucash]");
   CE_TEST (res, top_accounts_have_correct_names,
@@ -826,8 +695,6 @@ main (int argc, char *argv[])
            "The transactions have the correct entered dates [test.gnucash]");
   CE_TEST (res, transaction_slots,
            "The transactions have the correct slots [test.gnucash]");
-  CE_TEST (res, book_id_is_correct,
-           "The book id is correct [test.gnucash]");
   CE_TEST (res, saving_produces_file_with_same_content,
            "Saving produces a file with the same content [test.gnucash]");
   CE_TEST (res, saving_produces_file_with_same_content_2,

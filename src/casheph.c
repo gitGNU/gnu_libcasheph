@@ -20,270 +20,9 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include "mxml.h"
+
 #include "casheph.h"
-
-casheph_slot_t *casheph_parse_slot_contents (gzFile file);
-
-void
-casheph_consume_whitespace (int *c, gzFile file)
-{
-  do
-    {
-      *c = gzgetc (file);
-    }
-  while (*c != -1 && (*c == ' ' || *c == '\t' || *c == '\n' || *c == '\r'));
-}
-
-casheph_attribute_t *
-casheph_parse_attribute (gzFile file)
-{
-  int c;
-  casheph_consume_whitespace (&c, file);
-  if (c == -1)
-    {
-      return NULL;
-    }
-  char *name = (char*)malloc (256);
-  char *cur = name;
-  do
-    {
-      *cur = c;
-      cur++;
-      *cur = '\0';
-      c = gzgetc (file);
-    }
-  while (c != -1 && c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '=');
-
-  casheph_attribute_t *att = (casheph_attribute_t*)malloc (sizeof (casheph_attribute_t));
-  att->key = (char*)malloc (cur - name + 1);
-  strcpy (att->key, name);
-
-  if (c != '=')
-    {
-      casheph_consume_whitespace (&c, file);
-      if (c != '=')
-        {
-          free (name);
-          free (att->key);
-          free (att);
-          return NULL;
-        }
-    }
-  casheph_consume_whitespace (&c, file);
-  if (c == -1)
-    {
-      return NULL;
-    }
-  cur = name;
-  if (c == '\"')
-    {
-      do
-        {
-          *cur = c;
-          cur++;
-          *cur = '\0';
-          c = gzgetc (file);
-        }
-      while (c != -1 && c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '\"');
-    }
-  else if (c == '\'')
-    {
-      do
-        {
-          *cur = c;
-          cur++;
-          *cur = '\0';
-          c = gzgetc (file);
-        }
-      while (c != -1 && c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '\'');
-    }
-
-  att->val = (char*)malloc (cur - name);
-  strcpy (att->val, name + 1);
-  free (name);
-  return att;
-}
-
-casheph_tag_t *
-casheph_parse_tag (gzFile file)
-{
-  int c;
-  casheph_consume_whitespace (&c, file);
-  if (c == -1)
-    {
-      return NULL;
-    }
-  if (c != '<')
-    {
-      return NULL;
-    }
-  char *name = (char*)malloc (256);
-  char *cur = name;
-  do
-    {
-      *cur = c;
-      cur++;
-      *cur = '\0';
-      c = gzgetc (file);
-    }
-  while (c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '>');
-  casheph_tag_t *tag = (casheph_tag_t*)malloc (sizeof (casheph_tag_t));
-  tag->name = (char*)malloc (cur - name);
-  strcpy (tag->name, name + 1);
-  free (name);
-  if (strcmp (tag->name, "!--") == 0)
-    {
-      free (tag->name);
-      free (tag);
-      return NULL;
-    }
-  tag->n_attributes = 0;
-  tag->attributes = NULL;
-  while (c != '>')
-    {
-      ++tag->n_attributes;
-      tag->attributes = (casheph_attribute_t**)realloc (tag->attributes, tag->n_attributes * sizeof (casheph_attribute_t*));
-      tag->attributes[tag->n_attributes - 1] = casheph_parse_attribute (file);
-      c = gzgetc (file);
-    }
-  return tag;
-}
-
-void
-casheph_tag_destroy (casheph_tag_t *tag)
-{
-  if (tag == NULL)
-    {
-      return;
-    }
-  int i;
-  for (i = 0; i < tag->n_attributes; ++i)
-    {
-      free (tag->attributes[i]->key);
-      free (tag->attributes[i]->val);
-      free (tag->attributes[i]);
-    }
-  free (tag->attributes);
-  free (tag->name);
-  free (tag);
-}
-
-void
-casheph_skip_text (gzFile file)
-{
-  int c = gzgetc (file);
-  while (c != -1 && c != '<')
-    {
-      c = gzgetc (file);
-    }
-  if (c == '<')
-    {
-      gzungetc ('<', file);
-    }
-}
-
-char *
-casheph_parse_text (gzFile file)
-{
-  char *name = malloc (256);
-  char *cur = name;
-  int c = gzgetc (file);
-  while (c != -1 && c != '<')
-    {
-      *cur = c;
-      ++cur;
-      c = gzgetc (file);
-    }
-  *cur = '\0';
-  if (c == '<')
-    {
-      gzungetc ('<', file);
-    }
-  return name;
-}
-
-void
-casheph_parse_simple_complete_tag (char **dest, casheph_tag_t **tag, const char *name, gzFile file)
-{
-  if (*tag != NULL)
-    {
-      char *val = NULL;
-      char *endtagname = (char*)malloc (strlen (name) + 2);
-      endtagname[0] = '/';
-      strcpy (endtagname + 1, name);
-      if (strcmp ((*tag)->name, name) == 0)
-        {
-          *dest = casheph_parse_text (file);
-          casheph_tag_destroy (*tag);
-          *tag = casheph_parse_tag (file);
-          if (strcmp ((*tag)->name, endtagname) != 0)
-            {
-              fprintf (stderr, "Couldn't find matching <%s>\n", endtagname);
-              exit (1);
-            }
-          casheph_tag_destroy (*tag);
-          *tag = NULL;
-        }
-      free (endtagname);
-    }
-}
-
-void
-casheph_parse_simple_int_tag (int *dest, casheph_tag_t **tag, const char *name, gzFile file)
-{
-  char *buf = NULL;
-  casheph_parse_simple_complete_tag (&buf, tag, name, file);
-  if (buf != NULL)
-    {
-      sscanf (buf, "%d", dest);
-      free (buf);
-      buf = NULL;
-    }
-}
-
-void
-casheph_skip_any_tag (casheph_tag_t **tag, gzFile file)
-{
-  if (*tag != NULL && (*tag)->name[0] != '/')
-    {
-      char *endtagname = (char*)malloc (strlen ((*tag)->name) + 2);
-      sprintf (endtagname, "/%s", (*tag)->name);
-      casheph_skip_text (file);
-      casheph_tag_t *tag2 = casheph_parse_tag (file);
-      while (strcmp (tag2->name, endtagname) != 0)
-        {
-          casheph_skip_text (file);
-          casheph_tag_destroy (tag2);
-          tag2 = casheph_parse_tag (file);
-        }
-      free (endtagname);
-    }
-}
-
-casheph_gdate_t *
-casheph_parse_gdate (gzFile file)
-{
-  casheph_gdate_t *date = (casheph_gdate_t*)malloc (sizeof (casheph_gdate_t));
-  casheph_tag_t *tag = casheph_parse_tag (file);
-  if (strcmp (tag->name, "gdate") != 0)
-    {
-      fprintf (stderr, "gdate tag not found in slot of type gdate\n");
-    }
-  char *buf = casheph_parse_text (file);
-  date->year = (buf[0] - '0') * 1000 + (buf[1] - '0') * 1000
-    + (buf[2] - '0') * 10 + (buf[3] - '0');
-  date->month = (buf[5] - '0') * 10 + (buf[6] - '0');
-  date->day = (buf[8] - '0') * 10 + (buf[9] - '0');
-  casheph_tag_destroy (tag);
-  tag = casheph_parse_tag (file);
-  if (strcmp (tag->name, "/gdate") != 0)
-    {
-      fprintf (stderr, "Couldn't find matching </gdate>\n");
-      exit (1);
-    }
-  casheph_tag_destroy (tag);
-  return date;
-}
 
 casheph_val_t *
 casheph_parse_value_str (const char *str)
@@ -313,213 +52,6 @@ casheph_parse_value_str (const char *str)
       sscanf (str, "%d", &(val->n));
     }
   return val;
-}
-
-void
-casheph_parse_slot_value (void **value, casheph_slot_type_t *type, casheph_tag_t **tag, gzFile file)
-{
-  if (*tag != NULL && strcmp ((*tag)->name, "slot:value") == 0)
-    {
-      if ((*tag)->n_attributes > 0
-          && strcmp ((*tag)->attributes[0]->key, "type") == 0
-          && strcmp ((*tag)->attributes[0]->val, "gdate") == 0)
-        {
-          *type = ce_gdate;
-          *value = casheph_parse_gdate (file);
-          casheph_tag_destroy (*tag);
-          *tag = casheph_parse_tag (file);
-        }
-      else if ((*tag)->n_attributes > 0
-               && strcmp ((*tag)->attributes[0]->key, "type") == 0
-               && strcmp ((*tag)->attributes[0]->val, "string") == 0)
-        {
-          *type = ce_string;
-          char *buf = casheph_parse_text (file);
-          *value = buf;
-          casheph_tag_destroy (*tag);
-          *tag = casheph_parse_tag (file);
-        }
-      else if ((*tag)->n_attributes > 0
-               && strcmp ((*tag)->attributes[0]->key, "type") == 0
-               && strcmp ((*tag)->attributes[0]->val, "guid") == 0)
-        {
-          *type = ce_guid;
-          char *buf = casheph_parse_text (file);
-          *value = buf;
-          casheph_tag_destroy (*tag);
-          *tag = casheph_parse_tag (file);
-        }
-      else if ((*tag)->n_attributes > 0
-               && strcmp ((*tag)->attributes[0]->key, "type") == 0
-               && strcmp ((*tag)->attributes[0]->val, "numeric") == 0)
-        {
-          *type = ce_numeric;
-          char *buf = casheph_parse_text (file);
-          *value = casheph_parse_value_str (buf);
-          free (buf);
-          casheph_tag_destroy (*tag);
-          *tag = casheph_parse_tag (file);
-        }
-      else if ((*tag)->n_attributes > 0
-               && strcmp ((*tag)->attributes[0]->key, "type") == 0
-               && strcmp ((*tag)->attributes[0]->val, "frame") == 0)
-        {
-          *type = ce_frame;
-          casheph_frame_t *frame = (casheph_frame_t*)malloc (sizeof (casheph_frame_t));
-          frame->n_slots = 0;
-          frame->slots = NULL;
-          *tag = casheph_parse_tag (file);
-          while (strcmp ((*tag)->name, "slot") == 0)
-            {
-              casheph_slot_t *slot = casheph_parse_slot_contents (file);
-              ++frame->n_slots;
-              frame->slots = (casheph_slot_t**)realloc (frame->slots, sizeof (casheph_slot_t*) * frame->n_slots);
-              frame->slots[frame->n_slots - 1] = slot;
-              casheph_tag_destroy (*tag);
-              *tag = casheph_parse_tag (file);
-            }
-          *value = frame;
-        }
-      if (strcmp ((*tag)->name, "/slot:value") != 0)
-        {
-          fprintf (stderr, "Couldn't find matching </slot:value>\n");
-          fprintf (stderr, "Instead, found <%s>\n", (*tag)->name);
-          exit (1);
-        }
-      casheph_tag_destroy (*tag);
-      *tag = NULL;
-    }
-}
-
-casheph_slot_t *
-casheph_parse_slot_contents (gzFile file)
-{
-  casheph_slot_t *slot = (casheph_slot_t*)malloc (sizeof (casheph_slot_t));
-  slot->key = NULL;
-  slot->value = NULL;
-  casheph_tag_t *slot_tag = casheph_parse_tag (file);
-  while (strcmp (slot_tag->name, "/slot") != 0)
-    {
-      casheph_parse_simple_complete_tag (&(slot->key), &slot_tag, "slot:key", file);
-      casheph_parse_slot_value (&(slot->value), &(slot->type), &slot_tag, file);
-      casheph_skip_any_tag (&slot_tag, file);
-      casheph_tag_destroy (slot_tag);
-      slot_tag = casheph_parse_tag (file);
-    }
-  if (strcmp (slot_tag->name, "/slot") != 0)
-    {
-      fprintf (stderr, "Couldn't find matching </slot>\n");
-      fprintf (stderr, "Instead, found <%s>\n", slot_tag->name);
-      exit (1);
-    }
-  casheph_tag_destroy (slot_tag);
-  return slot;
-}
-
-void
-casheph_parse_slots (const char *prefix, casheph_slot_t ***slots, int *n_slots, casheph_tag_t **tag, gzFile file)
-{
-  char *tagname = (char*)malloc (strlen (prefix) + 6);
-  sprintf (tagname, "%sslots", prefix);
-  char *endtagname = (char*)malloc (strlen (prefix) + 7);
-  sprintf (endtagname, "/%sslots", prefix);
-  if (*tag != NULL && strcmp ((*tag)->name, tagname) == 0)
-    {
-      *n_slots = 0;
-      casheph_tag_t *slot_tag = casheph_parse_tag (file);
-      while (strcmp (slot_tag->name, "slot") == 0)
-        {
-          casheph_slot_t *slot = casheph_parse_slot_contents (file);
-          ++(*n_slots);
-          (*slots) = (casheph_slot_t**)realloc ((*slots), sizeof (casheph_slot_t*) * (*n_slots));
-          (*slots)[(*n_slots) - 1] = slot;
-          casheph_tag_destroy (slot_tag);
-          slot_tag = casheph_parse_tag (file);
-        }
-      if (strcmp (slot_tag->name, endtagname) != 0)
-        {
-          fprintf (stderr, "Couldn't find matching <%s>\n", endtagname);
-        }
-      casheph_tag_destroy (*tag);
-      *tag = NULL;
-    }
-  free (tagname);
-  free (endtagname);
-}
-
-void
-casheph_parse_account_slots (casheph_slot_t ***slots, int *n_slots, casheph_tag_t **tag, gzFile file)
-{
-  casheph_parse_slots ("act:", slots, n_slots, tag, file);
-}
-
-void
-casheph_parse_commodity (casheph_commodity_t **commodity_ptr, casheph_tag_t **tag, const char *tagname, gzFile file)
-{
-  char *endtagname = (char*)malloc (strlen (tagname) + 2);
-  sprintf (endtagname, "/%s", tagname);
-  if (*tag != NULL && strcmp ((*tag)->name, tagname) == 0)
-    {
-      casheph_commodity_t *commodity = (casheph_commodity_t*)malloc (sizeof (casheph_commodity_t));
-      commodity->space = NULL;
-      commodity->id = NULL;
-      casheph_tag_destroy (*tag);
-      *tag = casheph_parse_tag (file);
-      while (strcmp ((*tag)->name, endtagname) != 0)
-        {
-          casheph_parse_simple_complete_tag (&(commodity->space), tag, "cmdty:space", file);
-          casheph_parse_simple_complete_tag (&(commodity->id), tag, "cmdty:id", file);
-          casheph_skip_any_tag (tag, file);
-          *tag = casheph_parse_tag (file);
-        }
-      if (strcmp ((*tag)->name, endtagname) != 0)
-        {
-          fprintf (stderr, "Couldn't find matching <%s>\n", endtagname);
-        }
-      casheph_tag_destroy (*tag);
-      *tag = NULL;
-      *commodity_ptr = commodity;
-    }
-  free (endtagname);
-}
-
-casheph_account_t *
-parse_account_contents (gzFile file)
-{
-  casheph_account_t *account = (casheph_account_t*)malloc (sizeof (casheph_account_t));
-  account->name = NULL;
-  account->description = NULL;
-  account->type = NULL;
-  account->accounts = NULL;
-  account->n_accounts = 0;
-  account->id = NULL;
-  account->parent = NULL;
-  account->slots = NULL;
-  account->n_slots = 0;
-  account->commodity = NULL;
-  char *cmdty_scu = NULL;
-  casheph_tag_t *tag = casheph_parse_tag (file);
-  while (strcmp (tag->name, "/gnc:account") != 0)
-    {
-      casheph_parse_simple_complete_tag (&(account->name), &tag, "act:name", file);
-      casheph_parse_simple_complete_tag (&(account->type), &tag, "act:type", file);
-      casheph_parse_simple_complete_tag (&(account->id), &tag, "act:id", file);
-      casheph_parse_simple_complete_tag (&(account->description), &tag, "act:description", file);
-      casheph_parse_simple_complete_tag (&(account->parent), &tag, "act:parent", file);
-      casheph_parse_account_slots (&(account->slots), &(account->n_slots), &tag, file);
-      casheph_parse_commodity (&(account->commodity), &tag, "act:commodity", file);
-      casheph_parse_simple_complete_tag (&cmdty_scu, &tag, "act:commodity-scu", file);
-      if (cmdty_scu != NULL)
-        {
-          sscanf (cmdty_scu, "%d", &(account->commodity_scu));
-          free (cmdty_scu);
-          cmdty_scu = NULL;
-        }
-      casheph_skip_any_tag (&tag, file);
-      tag = casheph_parse_tag (file);
-    }
-  casheph_tag_destroy (tag);
-  return account;
 }
 
 casheph_account_t *
@@ -571,352 +103,6 @@ casheph_account_collect_accounts (casheph_account_t *act,
     }
 }
 
-void
-casheph_parse_split_slots (casheph_slot_t ***slots, int *n_slots, casheph_tag_t **tag, gzFile file)
-{
-  casheph_parse_slots ("split:", slots, n_slots, tag, file);
-}
-
-casheph_split_t *
-casheph_parse_split_contents (gzFile file)
-{
-  casheph_split_t *split = (casheph_split_t*)malloc (sizeof (casheph_split_t));
-  split->id = NULL;
-  split->reconciled_state = NULL;
-  split->account = NULL;
-  split->value = 0;
-  split->quantity = 0;
-  split->slots = NULL;
-  split->n_slots = 0;
-  casheph_tag_t *split_tag = casheph_parse_tag (file);
-  while (strcmp (split_tag->name, "/trn:split") != 0)
-    {
-      casheph_parse_simple_complete_tag (&(split->id), &split_tag, "split:id", file);
-      casheph_parse_simple_complete_tag (&(split->reconciled_state), &split_tag, "split:reconciled-state", file);
-      casheph_parse_simple_complete_tag (&(split->account), &split_tag, "split:account", file);
-      casheph_parse_split_slots (&(split->slots), &(split->n_slots), &split_tag, file);
-      if (split_tag != NULL && strcmp (split_tag->name, "split:value") == 0)
-        {
-          char *buf = casheph_parse_text (file);
-          casheph_val_t *val = casheph_parse_value_str (buf);
-          split->value = val;
-          casheph_tag_destroy (split_tag);
-          split_tag = casheph_parse_tag (file);
-          if (strcmp (split_tag->name, "/split:value") != 0)
-            {
-              fprintf (stderr, "Couldn't find matching </split:value>\n");
-              exit (1);
-            }
-        }
-      if (split_tag != NULL && strcmp (split_tag->name, "split:quantity") == 0)
-        {
-          char *buf = casheph_parse_text (file);
-          casheph_val_t *val = casheph_parse_value_str (buf);
-          split->quantity = val;
-          casheph_tag_destroy (split_tag);
-          split_tag = casheph_parse_tag (file);
-          if (strcmp (split_tag->name, "/split:quantity") != 0)
-            {
-              fprintf (stderr, "Couldn't find matching </split:quantity>\n");
-              exit (1);
-            }
-        }
-      casheph_skip_any_tag (&split_tag, file);
-      split_tag = casheph_parse_tag (file);
-    }
-  casheph_tag_destroy (split_tag);
-  return split;
-}
-
-void
-casheph_parse_splits (casheph_split_t ***splits, int *n_splits, casheph_tag_t **tag, gzFile file)
-{
-  if (*tag != NULL && strcmp ((*tag)->name, "trn:splits") == 0)
-    {
-      *n_splits = 0;
-      casheph_tag_t *split_tag = casheph_parse_tag (file);
-      while (strcmp (split_tag->name, "trn:split") == 0)
-        {
-          casheph_split_t *split = casheph_parse_split_contents (file);
-          ++(*n_splits);
-          (*splits) = (casheph_split_t**)realloc ((*splits), sizeof (casheph_split_t*) * (*n_splits));
-          (*splits)[(*n_splits) - 1] = split;
-          casheph_tag_destroy (split_tag);
-          split_tag = casheph_parse_tag (file);
-        }
-      if (strcmp (split_tag->name, "/trn:splits") != 0)
-        {
-          fprintf (stderr, "Couldn't find matching </trn:splits>\n");
-        }
-      casheph_tag_destroy (*tag);
-      *tag = NULL;
-    }
-}
-
-void
-casheph_parse_trn_slots (casheph_slot_t ***slots, int *n_slots, casheph_tag_t **tag, gzFile file)
-{
-  casheph_parse_slots ("trn:", slots, n_slots, tag, file);
-}
-
-void
-casheph_parse_date_field (time_t *date, casheph_tag_t **tag,
-                          const char *tag_name, gzFile file)
-{
-  if ((*tag) != NULL && strcmp ((*tag)->name, tag_name) == 0)
-    {
-      casheph_tag_t *date_tag = casheph_parse_tag (file);
-      if (strcmp (date_tag->name, "ts:date") != 0)
-        {
-          fprintf (stderr, "No ts:date found\n");
-        }
-      char date_str[25];
-      if (gzread (file, date_str, 25) < 25)
-        {
-          fprintf (stderr, "Couldn't read expected 25 bytes of date\n");
-        }
-      else
-        {
-          casheph_tag_destroy (date_tag);
-          date_tag = casheph_parse_tag (file);
-          if (strcmp (date_tag->name, "/ts:date") != 0)
-            {
-              fprintf (stderr, "Couldn't find matching </ts:date>\n");
-            }
-          casheph_tag_destroy (date_tag);
-          tzset ();
-          struct tm tm;
-          memset (&tm, 0, sizeof (struct tm));
-          strptime (date_str, "%Y-%m-%d %H:%M:%S", &tm);
-          (*date) = mktime (&tm);
-          (*date) += tm.tm_gmtoff - (tm.tm_isdst * 3600);
-          int minutes_to_add = date_str[24] - '0'
-            + (date_str[23] - '0') * 10
-            + (date_str[22] - '0') * 60
-            + (date_str[21] - '0') * 600;
-          int seconds_to_add = minutes_to_add * 60;
-          if (date_str[20] == '+')
-            {
-              seconds_to_add *= -1;
-            }
-          (*date) += seconds_to_add;
-          casheph_tag_destroy (*tag);
-          *tag = casheph_parse_tag (file);
-          char *endtagname = (char*)malloc (strlen (tag_name) + 2);
-          strcpy (endtagname + 1, tag_name);
-          endtagname[0] = '/';
-          if (strcmp ((*tag)->name, endtagname) != 0)
-            {
-              fprintf (stderr, "Couldn't find matching <%s>\n", endtagname);
-              exit (1);
-            }
-        }
-      casheph_tag_destroy (*tag);
-      *tag = NULL;
-    }
-}
-
-void
-casheph_parse_date_posted (time_t *date_posted, casheph_tag_t **tag, gzFile file)
-{
-  casheph_parse_date_field (date_posted, tag, "trn:date-posted", file);
-}
-
-void
-casheph_parse_date_entered (time_t *date_posted, casheph_tag_t **tag, gzFile file)
-{
-  casheph_parse_date_field (date_posted, tag, "trn:date-entered", file);
-}
-
-casheph_transaction_t *
-casheph_parse_trn_contents (gzFile file)
-{
-  casheph_transaction_t *trn = (casheph_transaction_t*)malloc (sizeof (casheph_transaction_t));
-  trn->n_splits = 0;
-  trn->splits = NULL;
-  trn->n_slots = 0;
-  trn->slots = NULL;
-  trn->id = NULL;
-  casheph_tag_t *tag = casheph_parse_tag (file);
-  while (strcmp (tag->name, "/gnc:transaction") != 0)
-    {
-      casheph_parse_simple_complete_tag (&(trn->id), &tag, "trn:id", file);
-      casheph_parse_simple_complete_tag (&(trn->desc), &tag, "trn:description", file);
-      casheph_parse_splits (&(trn->splits), &(trn->n_splits), &tag, file);
-      casheph_parse_trn_slots (&(trn->slots), &(trn->n_slots), &tag, file);
-      casheph_parse_date_posted (&(trn->date_posted), &tag, file);
-      casheph_parse_date_entered (&(trn->date_entered), &tag, file);
-      casheph_skip_any_tag (&tag, file);
-      tag = casheph_parse_tag (file);
-    }
-  casheph_tag_destroy (tag);
-  return trn;
-}
-
-void
-casheph_parse_simple_bool_tag (bool *out, casheph_tag_t **tag, const char *tagname, gzFile file)
-{
-  char *temp = NULL;
-  casheph_parse_simple_complete_tag (&temp, tag, tagname, file);
-  if (temp != NULL)
-    {
-      *out = strcmp (temp, "y") == 0;
-      free (temp);
-      temp = NULL;
-    }
-}
-
-casheph_recurrence_t *
-casheph_parse_recurrence (casheph_tag_t **tag, gzFile file)
-{
-  casheph_recurrence_t *ret = NULL;
-  if (*tag != NULL && strcmp ((*tag)->name, "gnc:recurrence") == 0)
-    {
-      casheph_recurrence_t *recurrence = (casheph_recurrence_t*)malloc (sizeof (casheph_recurrence_t));
-      recurrence->mult = 0;
-      recurrence->period_type = NULL;
-      recurrence->start = NULL;
-      recurrence->weekend_adj = NULL;
-      *tag = casheph_parse_tag (file);
-      while (strcmp ((*tag)->name, "/gnc:recurrence") != 0)
-        {
-          casheph_parse_simple_int_tag (&(recurrence->mult), tag, "recurrence:mult", file);
-          casheph_parse_simple_complete_tag (&(recurrence->period_type), tag, "recurrence:period_type", file);
-          casheph_parse_simple_complete_tag (&(recurrence->weekend_adj), tag, "recurrence:weekend_adj", file);
-          if (*tag != NULL && strcmp ((*tag)->name, "recurrence:start") == 0)
-            {
-              recurrence->start = casheph_parse_gdate (file);
-              casheph_tag_destroy (*tag);
-              *tag = NULL;
-            }
-          casheph_skip_any_tag (tag, file);
-          *tag = casheph_parse_tag (file);
-        }
-      if (strcmp ((*tag)->name, "/gnc:recurrence") != 0)
-        {
-          fprintf (stderr, "Couldn't find matching </gnc:recurrence>\n");
-        }
-      casheph_tag_destroy (*tag);
-      *tag = NULL;
-      ret = recurrence;
-    }
-  return ret;
-}
-
-void
-casheph_parse_schedule (casheph_schedule_t **schedule_ptr, casheph_tag_t **tag, const char *tagname, gzFile file)
-{
-  char *endtagname = (char*)malloc (strlen (tagname) + 2);
-  sprintf (endtagname, "/%s", tagname);
-  if (*tag != NULL && strcmp ((*tag)->name, tagname) == 0)
-    {
-      casheph_schedule_t *schedule = (casheph_schedule_t*)malloc (sizeof (casheph_schedule_t));
-      schedule->n_recurrences = 0;
-      schedule->recurrences = NULL;
-      *tag = casheph_parse_tag (file);
-      while (strcmp ((*tag)->name, endtagname) != 0)
-        {
-          casheph_recurrence_t *rec = casheph_parse_recurrence (tag, file);
-          if (rec != NULL)
-            {
-              ++schedule->n_recurrences;
-              schedule->recurrences = (casheph_recurrence_t**)realloc (schedule->recurrences, sizeof (casheph_recurrence_t*) * schedule->n_recurrences);
-              schedule->recurrences[schedule->n_recurrences - 1] = rec;
-            }
-          casheph_skip_any_tag (tag, file);
-          *tag = casheph_parse_tag (file);
-        }
-      if (strcmp ((*tag)->name, endtagname) != 0)
-        {
-          fprintf (stderr, "Couldn't find matching <%s>\n", endtagname);
-        }
-      casheph_tag_destroy (*tag);
-      *tag = NULL;
-      *schedule_ptr = schedule;
-    }
-  free (endtagname);
-}
-
-casheph_schedxaction_t *
-casheph_parse_schedxaction_contents (gzFile file)
-{
-  casheph_schedxaction_t *sx = (casheph_schedxaction_t*)malloc (sizeof (casheph_schedxaction_t));
-  sx->id = NULL;
-  sx->start = NULL;
-  sx->last = NULL;
-  sx->schedule = NULL;
-  casheph_tag_t *tag = casheph_parse_tag (file);
-  while (strcmp (tag->name, "/gnc:schedxaction") != 0)
-    {
-      casheph_parse_simple_complete_tag (&(sx->id), &tag, "sx:id", file);
-      casheph_parse_simple_complete_tag (&(sx->name), &tag, "sx:name", file);
-      casheph_parse_simple_bool_tag (&(sx->enabled), &tag, "sx:enabled", file);
-      casheph_parse_simple_bool_tag (&(sx->auto_create), &tag, "sx:autoCreate", file);
-      casheph_parse_simple_bool_tag (&(sx->auto_create_notify), &tag, "sx:autoCreateNotify", file);
-      casheph_parse_simple_int_tag (&(sx->advance_create_days), &tag, "sx:advanceCreateDays", file);
-      casheph_parse_simple_int_tag (&(sx->advance_remind_days), &tag, "sx:advanceRemindDays", file);
-      casheph_parse_simple_int_tag (&(sx->instance_count), &tag, "sx:instanceCount", file);
-      if (tag != NULL && strcmp (tag->name, "sx:start") == 0)
-        {
-          sx->start = casheph_parse_gdate (file);
-          casheph_tag_destroy (tag);
-          tag = NULL;
-        }
-      if (tag != NULL && strcmp (tag->name, "sx:last") == 0)
-        {
-          sx->last = casheph_parse_gdate (file);
-          casheph_tag_destroy (tag);
-          tag = NULL;
-        }
-      casheph_parse_simple_complete_tag (&(sx->templ_acct), &tag, "sx:templ-acct", file);
-      casheph_parse_schedule (&(sx->schedule), &tag, "sx:schedule", file);
-      casheph_skip_any_tag (&tag, file);
-      tag = casheph_parse_tag (file);
-    }
-  casheph_tag_destroy (tag);
-  return sx;
-}
-
-void
-parse_template_transactions (casheph_account_t **template_root,
-                             int *n_template_transactions,
-                             casheph_transaction_t ***template_transactions,
-                             gzFile file)
-{
-  int n_accounts = 0;
-  casheph_account_t **accounts = NULL;
-  casheph_tag_t *tag = casheph_parse_tag (file);
-  while (strcmp (tag->name, "/gnc:template-transactions") != 0)
-    {
-      if (strcmp (tag->name, "gnc:account") == 0)
-        {
-          casheph_account_t *act = parse_account_contents (file);
-          if (act != NULL)
-            {
-              ++n_accounts;
-              accounts = (casheph_account_t**)realloc (accounts, sizeof (casheph_account_t*) * n_accounts);
-              accounts[n_accounts - 1] = act;
-              if (strcmp (act->type, "ROOT") == 0)
-                {
-                  *template_root = act;
-                }
-            }
-        }
-      else if (strcmp (tag->name, "gnc:transaction") == 0)
-        {
-          casheph_transaction_t *trn = casheph_parse_trn_contents (file);
-          ++(*n_template_transactions);
-          *template_transactions = (casheph_transaction_t**)realloc (*template_transactions,
-                                                                     sizeof (casheph_transaction_t*) * *n_template_transactions);
-          (*template_transactions)[*n_template_transactions - 1] = trn;
-        }
-      casheph_tag_destroy (tag);
-      tag = casheph_parse_tag (file);
-    }
-  casheph_account_collect_accounts (*template_root, n_accounts, accounts);
-  casheph_tag_destroy (tag);
-}
-
 int
 casheph_get_xml_declaration (gzFile file)
 {
@@ -933,30 +119,399 @@ casheph_get_xml_declaration (gzFile file)
   return 0;
 }
 
-void
-casheph_parse_account (casheph_tag_t **tag, casheph_account_t **act, gzFile file)
+char *
+mxml_load_text (mxml_node_t *txt_node)
 {
-  if (*tag != NULL && strcmp ((*tag)->name, "gnc:account") == 0)
+  char *str = NULL;
+  mxml_node_t *txt_val_node = mxmlGetFirstChild (txt_node);
+  if (txt_val_node == NULL)
     {
-      *act = parse_account_contents (file);
-      casheph_tag_destroy (*tag);
-      *tag = NULL;
+      str = malloc (1);
+      str[0] = '\0';
+      return str;
     }
+  str = strdup (mxmlGetText (txt_val_node, NULL));
+  while ((txt_val_node = mxmlGetNextSibling (txt_val_node)) != NULL)
+    {
+      str = (char*)realloc (str,
+                            strlen (str) + strlen (mxmlGetText (txt_val_node,
+                                                                NULL)) + 2);
+      strcat (str, " ");
+      strcat (str, mxmlGetText (txt_val_node, NULL));
+    }
+  return str;
+}
+
+char *
+mxml_load_child_text (mxml_node_t *node, const char *name)
+{
+  char *str = NULL;
+  mxml_node_t *ch = mxmlFindElement (node, node, name, NULL, NULL, MXML_DESCEND);
+  if (ch)
+    {
+      str = mxml_load_text (ch);
+    }
+  return str;
+}
+
+bool
+mxml_load_child_yn (mxml_node_t *node, const char *name)
+{
+  bool res = false;
+  char *buf = mxml_load_child_text (node, name);
+  if (buf != NULL)
+    {
+      if (buf[0] == 'y')
+        {
+          res = true;
+        }
+    }
+  free (buf);
+  return res;
+}
+
+casheph_gdate_t *
+mxml_load_gdate (mxml_node_t *slot_val_node)
+{
+  casheph_gdate_t *date = (casheph_gdate_t*)malloc (sizeof (casheph_gdate_t));
+  char *buf = mxml_load_child_text (slot_val_node, "gdate");
+  date->year = (buf[0] - '0') * 1000 + (buf[1] - '0') * 1000
+    + (buf[2] - '0') * 10 + (buf[3] - '0');
+  date->month = (buf[5] - '0') * 10 + (buf[6] - '0');
+  date->day = (buf[8] - '0') * 10 + (buf[9] - '0');
+  free (buf);
+  return date;
+}
+
+int
+mxml_load_child_int (mxml_node_t *node, const char *name)
+{
+  int res = -1;
+  char *buf = mxml_load_child_text (node, name);
+  if (buf)
+    {
+      sscanf (buf, "%d", &res);
+    }
+  free (buf);
+  return res;
+}
+
+casheph_gdate_t *
+mxml_load_child_gdate (mxml_node_t *node, const char *name)
+{
+  mxml_node_t *ch = mxmlFindElement (node, node, name, NULL, NULL, MXML_DESCEND);
+  if (ch == NULL)
+    {
+      return 0;
+    }
+  return mxml_load_gdate (ch);
+}
+
+time_t
+mxml_load_child_ts_date (mxml_node_t *node, const char *name)
+{
+  mxml_node_t *ch = mxmlFindElement (node, node, name, NULL, NULL, MXML_DESCEND);
+  if (ch == NULL)
+    {
+      return 0;
+    }
+  char *date_str = mxml_load_child_text (ch, "ts:date");
+
+  tzset ();
+  struct tm tm;
+  memset (&tm, 0, sizeof (struct tm));
+  strptime (date_str, "%Y-%m-%d %H:%M:%S", &tm);
+  time_t t = mktime (&tm);
+  t += tm.tm_gmtoff - (tm.tm_isdst * 3600);
+  int minutes_to_add = date_str[24] - '0'
+    + (date_str[23] - '0') * 10
+    + (date_str[22] - '0') * 60
+    + (date_str[21] - '0') * 600;
+  int seconds_to_add = minutes_to_add * 60;
+  if (date_str[20] == '+')
+    {
+      seconds_to_add *= -1;
+    }
+  t += seconds_to_add;
+
+  return t;
+}
+
+casheph_val_t *
+mxml_load_child_val (mxml_node_t *node, const char *name)
+{
+  char *buf = mxml_load_child_text (node, name);
+  casheph_val_t *val = casheph_parse_value_str (buf);
+  free (buf);
+  return val;
+}
+
+casheph_slot_t *
+mxml_load_slot (mxml_node_t *slot_node)
+{
+  casheph_slot_t *slot = (casheph_slot_t*)malloc (sizeof (casheph_slot_t));
+  slot->key = mxml_load_child_text (slot_node, "slot:key");
+  mxml_node_t *value = mxmlFindElement (slot_node, slot_node, "slot:value", NULL, NULL, MXML_DESCEND);
+  if (strcmp (mxmlElementGetAttr (value, "type"), "gdate") == 0)
+    {
+      slot->type = ce_gdate;
+      slot->value = mxml_load_gdate (value);
+    }
+  else if (strcmp (mxmlElementGetAttr (value, "type"), "string") == 0)
+    {
+      slot->type = ce_string;
+      slot->value = mxml_load_text (value);
+    }
+  else if (strcmp (mxmlElementGetAttr (value, "type"), "guid") == 0)
+    {
+      slot->type = ce_guid;
+      slot->value = mxml_load_text (value);
+    }
+  else if (strcmp (mxmlElementGetAttr (value, "type"), "frame") == 0)
+    {
+      casheph_frame_t *frame = (casheph_frame_t*)malloc (sizeof (casheph_frame_t));
+      frame->n_slots = 0;
+      frame->slots = NULL;
+      mxml_node_t *in_slot_node = slot_node;
+      while ((in_slot_node = mxmlFindElement (in_slot_node, slot_node, "slot", NULL, NULL, MXML_DESCEND)) != NULL)
+        {
+          casheph_slot_t *in_slot = mxml_load_slot (in_slot_node);
+          ++frame->n_slots;
+          frame->slots = (casheph_slot_t**)realloc (frame->slots, sizeof (casheph_slot_t*) * frame->n_slots);
+          frame->slots[frame->n_slots - 1] = in_slot;
+        }
+      slot->type = ce_frame;
+      slot->value = frame;
+    }
+  else if (strcmp (mxmlElementGetAttr (value, "type"), "numeric") == 0)
+    {
+      slot->type = ce_numeric;
+      slot->value = casheph_parse_value_str (mxml_load_text (value));
+    }
+  else
+    {
+      printf ("slot type: %s\n", mxmlElementGetAttr (value, "type"));
+      return NULL;
+    }
+  return slot;
+}
+
+casheph_recurrence_t *
+mxml_load_recurrence (mxml_node_t *rec_node)
+{
+  casheph_recurrence_t *recurrence = (casheph_recurrence_t*)malloc (sizeof (casheph_recurrence_t));
+  recurrence->mult = 0;
+  recurrence->period_type = NULL;
+  recurrence->start = NULL;
+  recurrence->weekend_adj = NULL;
+  recurrence->mult = mxml_load_child_int (rec_node, "recurrence:mult");
+  recurrence->period_type = mxml_load_child_text (rec_node, "recurrence:period_type");
+  recurrence->weekend_adj = mxml_load_child_text (rec_node, "recurrence:weekend_adj");
+  recurrence->start = mxml_load_child_gdate (rec_node, "recurrence:start");
+  return recurrence;
+}
+
+casheph_schedule_t *
+mxml_load_schedule (mxml_node_t *sched_node)
+{
+  casheph_schedule_t *schedule = (casheph_schedule_t*)malloc (sizeof (casheph_schedule_t));
+  schedule->n_recurrences = 0;
+  schedule->recurrences = NULL;
+  mxml_node_t *rec_node = sched_node;
+  while ((rec_node = mxmlFindElement (rec_node, sched_node, "gnc:recurrence",
+                                      NULL, NULL, MXML_DESCEND)) != NULL)
+    {
+      casheph_recurrence_t *rec = mxml_load_recurrence (rec_node);
+      if (rec != NULL)
+        {
+          ++schedule->n_recurrences;
+          schedule->recurrences = (casheph_recurrence_t**)realloc (schedule->recurrences, sizeof (casheph_recurrence_t*) * schedule->n_recurrences);
+          schedule->recurrences[schedule->n_recurrences - 1] = rec;
+        }
+    }
+  return schedule;
+}
+
+casheph_schedxaction_t *
+mxml_load_schedxaction (mxml_node_t *schx_node)
+{
+  casheph_schedxaction_t *sx = (casheph_schedxaction_t*)malloc (sizeof (casheph_schedxaction_t));
+  sx->start = NULL;
+  sx->last = NULL;
+  sx->schedule = NULL;
+  sx->id = mxml_load_child_text (schx_node, "sx:id");
+  sx->name = mxml_load_child_text (schx_node, "sx:name");
+  sx->enabled = mxml_load_child_yn (schx_node, "sx:enabled");
+  sx->auto_create = mxml_load_child_yn (schx_node, "sx:autoCreate");
+  sx->auto_create_notify = mxml_load_child_yn (schx_node, "sx:autoCreateNotify");
+  sx->advance_create_days = mxml_load_child_int (schx_node, "sx:advanceCreateDays");
+  sx->advance_remind_days = mxml_load_child_int (schx_node, "sx:advanceRemindDays");
+  sx->instance_count = mxml_load_child_int (schx_node, "sx:instanceCount");
+  sx->start = mxml_load_child_gdate (schx_node, "sx:start");
+  sx->last = mxml_load_child_gdate (schx_node, "sx:last");
+  sx->templ_acct = mxml_load_child_text (schx_node, "sx:templ-acct");
+  mxml_node_t *sched_node = mxmlFindElement (schx_node,
+                                             schx_node,
+                                             "sx:schedule",
+                                             NULL, NULL, MXML_DESCEND);
+  if (sched_node)
+    {
+      sx->schedule = mxml_load_schedule (sched_node);
+    }
+  return sx;
+}
+
+casheph_account_t *
+mxml_load_account (mxml_node_t *act_node)
+{
+  casheph_account_t *account = (casheph_account_t*)malloc (sizeof (casheph_account_t));
+
+  account->accounts = NULL;
+  account->n_accounts = 0;
+  account->slots = NULL;
+  account->n_slots = 0;
+
+  account->name = mxml_load_child_text (act_node, "act:name");
+  account->type = mxml_load_child_text (act_node, "act:type");
+  account->id = mxml_load_child_text (act_node, "act:id");
+  account->parent = mxml_load_child_text (act_node, "act:parent");
+  account->description = mxml_load_child_text (act_node, "act:description");
+  account->commodity = NULL;
+  mxml_node_t *cmdty_node = mxmlFindElement (act_node, act_node, "act:commodity", NULL, NULL, MXML_DESCEND);
+  if (cmdty_node)
+    {
+      casheph_commodity_t *commodity = (casheph_commodity_t*)malloc (sizeof (casheph_commodity_t));
+      commodity->space = mxml_load_child_text (cmdty_node, "cmdty:space");
+      commodity->id = mxml_load_child_text (cmdty_node, "cmdty:id");
+      account->commodity = commodity;
+    }
+  account->commodity_scu = 0;
+  char *cmdty_scu = mxml_load_child_text (act_node, "act:commodity-scu");
+  if (cmdty_scu != NULL)
+    {
+      sscanf (cmdty_scu, "%d", &(account->commodity_scu));
+    }
+  account->n_slots = 0;
+  account->slots = NULL;
+  mxml_node_t *slots_node = mxmlFindElement (act_node, act_node, "act:slots", NULL, NULL, MXML_DESCEND);
+  mxml_node_t *slot_node = slots_node;
+  if (slots_node != NULL)
+    {
+      while ((slot_node = mxmlFindElement (slot_node, slots_node, "slot", NULL, NULL, MXML_DESCEND)) != NULL)
+        {
+          casheph_slot_t *slot = mxml_load_slot (slot_node);
+          ++account->n_slots;
+          account->slots = (casheph_slot_t**)realloc (account->slots, sizeof (casheph_slot_t*) * account->n_slots);
+          account->slots[account->n_slots - 1] = slot;
+        }
+    }
+
+  return account;
+}
+
+casheph_split_t *
+mxml_load_split (mxml_node_t *split_node)
+{
+  casheph_split_t *split = (casheph_split_t*)malloc (sizeof (casheph_split_t));
+
+  split->id = mxml_load_child_text (split_node, "split:id");
+  split->reconciled_state = mxml_load_child_text (split_node, "split:reconciled-state");
+  split->account = mxml_load_child_text (split_node, "split:account");
+  split->value = mxml_load_child_val (split_node, "split:value");
+  split->quantity = mxml_load_child_val (split_node, "split:quantity");
+  split->n_slots = 0;
+  split->slots = NULL;
+  mxml_node_t *slots_node = mxmlFindElement (split_node, split_node, "split:slots", NULL, NULL, MXML_DESCEND);
+  mxml_node_t *slot_node = slots_node;
+  if (slots_node != NULL)
+    {
+      while ((slot_node = mxmlFindElement (slot_node, slots_node, "slot", NULL, NULL, MXML_DESCEND_FIRST)) != NULL)
+        {
+          casheph_slot_t *slot = mxml_load_slot (slot_node);
+          ++split->n_slots;
+          split->slots = (casheph_slot_t**)realloc (split->slots, sizeof (casheph_slot_t*) * split->n_slots);
+          split->slots[split->n_slots - 1] = slot;
+        }
+    }
+
+  return split;
+}
+
+casheph_transaction_t *
+mxml_load_transaction (mxml_node_t *trn_node)
+{
+  casheph_transaction_t *trn = (casheph_transaction_t*)malloc (sizeof (casheph_transaction_t));
+
+  trn->desc = mxml_load_child_text (trn_node, "trn:description");
+  trn->id = mxml_load_child_text (trn_node, "trn:id");
+  trn->date_posted = mxml_load_child_ts_date (trn_node, "trn:date-posted");
+  trn->date_entered = mxml_load_child_ts_date (trn_node, "trn:date-entered");
+  mxml_node_t *splits_node = mxmlFindElement (trn_node, trn_node, "trn:splits", NULL, NULL, MXML_DESCEND);
+  trn->splits = NULL;
+  trn->n_splits = 0;
+  mxml_node_t *split_node = splits_node;
+  while ((split_node = mxmlFindElement (split_node, splits_node, "trn:split", NULL, NULL, MXML_DESCEND)) != NULL)
+    {
+      casheph_split_t *split = mxml_load_split (split_node);
+      ++trn->n_splits;
+      trn->splits = (casheph_split_t**)realloc (trn->splits, sizeof (casheph_split_t*) * trn->n_splits);
+      trn->splits[trn->n_splits - 1] = split;
+    }
+  trn->n_slots = 0;
+  trn->slots = NULL;
+  mxml_node_t *slots_node = mxmlFindElement (trn_node, trn_node, "trn:slots", NULL, NULL, MXML_DESCEND);
+  mxml_node_t *slot_node = slots_node;
+  if (slots_node != NULL)
+    {
+      while ((slot_node = mxmlFindElement (slot_node, slots_node, "slot", NULL, NULL, MXML_DESCEND)) != NULL)
+        {
+          casheph_slot_t *slot = mxml_load_slot (slot_node);
+          ++trn->n_slots;
+          trn->slots = (casheph_slot_t**)realloc (trn->slots, sizeof (casheph_slot_t*) * trn->n_slots);
+          trn->slots[trn->n_slots - 1] = slot;
+        }
+    }
+
+  return trn;
 }
 
 casheph_t *
 casheph_open (const char *filename)
 {
-  gzFile file = gzopen (filename, "r");
-  if (file == NULL)
+  gzFile file2 = gzopen (filename, "r");
+  if (file2 == NULL)
     {
       return NULL;
     }
-  if (casheph_get_xml_declaration (file) == -1)
+  int file_len = 0;
+  char *file_str = NULL;
+  char buffer[128];
+  int n;
+  while ((n = gzread (file2, buffer, 128)) > 0)
     {
-      gzclose (file);
+      file_len += n;
+      file_str = (char*)realloc (file_str, file_len + 1);
+      file_str[file_len] = '\0';
+      strncpy (file_str + file_len - n, buffer, n);
+    }
+  gzclose (file2);
+  char newb[129];
+  newb[128] = '\0';
+  strncpy (newb, file_str, 128);
+
+  mxml_node_t *tree = mxmlLoadString (NULL, file_str, MXML_TEXT_CALLBACK);
+
+  if (tree->type != MXML_ELEMENT)
+    {
       return NULL;
     }
+  if (strncmp (tree->value.element.name, "?xml", 4) != 0)
+    {
+      return NULL;
+    }
+
+  mxml_node_t *gnc_root = mxmlFindElement (tree, tree, "gnc-v2", NULL, NULL, MXML_DESCEND);
+
   casheph_t *ce = (casheph_t*)malloc (sizeof (casheph_t));
   ce->n_transactions = 0;
   ce->transactions = NULL;
@@ -965,57 +520,118 @@ casheph_open (const char *filename)
   ce->template_root = NULL;
   ce->n_schedxactions = 0;
   ce->schedxactions = NULL;
-  int n_accounts = 0;
+  mxml_node_t *book_id_node = mxmlFindElement (gnc_root, gnc_root, "book:id", NULL, NULL, MXML_DESCEND);
+  int whitespace = 0;
+  mxml_node_t *book_id_val = mxmlGetFirstChild (book_id_node);
+
+  ce->book_id = strdup (mxmlGetText (book_id_val, NULL));
+
+  mxml_node_t *act_node = NULL;
   casheph_account_t **accounts = NULL;
-  while (!gzeof (file))
+  int n_accounts = 0;
+  act_node = mxmlFindElement (gnc_root,
+                              gnc_root,
+                              "gnc:account",
+                              NULL,
+                              NULL,
+                              MXML_DESCEND);
+  do
     {
-      casheph_skip_text (file);
-      casheph_tag_t *tag = casheph_parse_tag (file);
-      casheph_account_t *account = NULL;
-      casheph_parse_simple_complete_tag (&(ce->book_id), &tag, "book:id", file);
-      casheph_parse_account (&tag, &account, file);
-      if (account != NULL)
+      casheph_account_t *account = mxml_load_account (act_node);
+      ++n_accounts;
+      accounts = (casheph_account_t**)realloc (accounts, sizeof (casheph_account_t*) * n_accounts);
+      accounts[n_accounts - 1] = account;
+      if (strcmp (account->type, "ROOT") == 0)
         {
-          ++n_accounts;
-          accounts = (casheph_account_t**)realloc (accounts, sizeof (casheph_account_t*) * n_accounts);
-          accounts[n_accounts - 1] = account;
+          ce->root = account;
+        }
+    }
+  while ((act_node = mxmlFindElement (act_node,
+                                      gnc_root,
+                                      "gnc:account",
+                                      NULL,
+                                      NULL,
+                                      MXML_NO_DESCEND)) != NULL);
+
+  mxml_node_t *trn_node = NULL;
+  trn_node = mxmlFindElement (gnc_root,
+                              gnc_root,
+                              "gnc:transaction",
+                              NULL,
+                              NULL,
+                              MXML_DESCEND);
+  do
+    {
+      casheph_transaction_t *transaction = mxml_load_transaction (trn_node);
+      ++ce->n_transactions;
+      ce->transactions = (casheph_transaction_t**)realloc (ce->transactions,
+                                                           sizeof (casheph_transaction_t*)
+                                                           * ce->n_transactions);
+      ce->transactions[ce->n_transactions - 1] = transaction;
+    }
+  while ((trn_node = mxmlFindElement (trn_node,
+                                      gnc_root,
+                                      "gnc:transaction",
+                                      NULL,
+                                      NULL,
+                                      MXML_NO_DESCEND)) != NULL);
+  mxml_node_t *templ_trns_node = mxmlFindElement (gnc_root, gnc_root, "gnc:template-transactions", NULL, NULL, MXML_DESCEND);
+  if (templ_trns_node)
+    {
+      casheph_account_t **tt_accounts = NULL;
+      int n_tt_accounts = 0;
+      act_node = templ_trns_node;
+      while ((act_node = mxmlFindElement (act_node,
+                                          templ_trns_node,
+                                          "gnc:account",
+                                          NULL,
+                                          NULL,
+                                          MXML_DESCEND)) != NULL)
+        {
+          casheph_account_t *account = mxml_load_account (act_node);
+          ++n_tt_accounts;
+          tt_accounts = (casheph_account_t**)realloc (tt_accounts, sizeof (casheph_account_t*) * n_tt_accounts);
+          tt_accounts[n_tt_accounts - 1] = account;
           if (strcmp (account->type, "ROOT") == 0)
             {
-              ce->root = account;
+              ce->template_root = account;
             }
         }
-      if (tag != NULL && strcmp (tag->name, "gnc:transaction") == 0)
+      trn_node = templ_trns_node;
+      while ((trn_node = mxmlFindElement (trn_node,
+                                          templ_trns_node,
+                                          "gnc:transaction",
+                                          NULL,
+                                          NULL,
+                                          MXML_DESCEND)) != NULL)
         {
-          casheph_tag_destroy (tag);
-          tag = NULL;
-          ++ce->n_transactions;
-          casheph_transaction_t *trn = casheph_parse_trn_contents (file);
-          ce->transactions = (casheph_transaction_t**)realloc (ce->transactions, sizeof (casheph_transaction_t*) * ce->n_transactions);
-          ce->transactions[ce->n_transactions - 1] = trn;
+          casheph_transaction_t *transaction = mxml_load_transaction (trn_node);
+          ++ce->n_template_transactions;
+          ce->template_transactions = (casheph_transaction_t**)realloc (ce->template_transactions,
+                                                               sizeof (casheph_transaction_t*)
+                                                               * ce->n_template_transactions);
+          ce->template_transactions[ce->n_template_transactions - 1] = transaction;
         }
-      if (tag != NULL && strcmp (tag->name, "gnc:template-transactions") == 0)
-        {
-          casheph_tag_destroy (tag);
-          tag = NULL;
-          parse_template_transactions (&(ce->template_root),
-                                       &(ce->n_template_transactions),
-                                       &(ce->template_transactions),
-                                       file);
-        }
-      if (tag != NULL && strcmp (tag->name, "gnc:schedxaction") == 0)
-        {
-          casheph_tag_destroy (tag);
-          tag = NULL;
-          ++ce->n_schedxactions;
-          casheph_schedxaction_t *sx = casheph_parse_schedxaction_contents (file);
-          ce->schedxactions = (casheph_schedxaction_t**)realloc (ce->schedxactions,
-                                                                 sizeof (casheph_schedxaction_t*) * ce->n_schedxactions);
-          ce->schedxactions[ce->n_schedxactions - 1] = sx;
-        }
-      casheph_tag_destroy (tag);
+      casheph_account_collect_accounts (ce->template_root, n_tt_accounts, tt_accounts);
     }
+  mxml_node_t *schx_node = gnc_root;
+  while ((schx_node = mxmlFindElement (schx_node,
+                                       gnc_root,
+                                       "gnc:schedxaction",
+                                       NULL,
+                                       NULL,
+                                       MXML_DESCEND)) != NULL)
+    {
+      casheph_schedxaction_t *schedxaction = mxml_load_schedxaction (schx_node);
+      ++ce->n_schedxactions;
+      ce->schedxactions = (casheph_schedxaction_t**)realloc (ce->schedxactions,
+                                                             sizeof (casheph_schedxaction_t*)
+                                                             * ce->n_schedxactions);
+      ce->schedxactions[ce->n_schedxactions - 1] = schedxaction;
+    }
+
   casheph_account_collect_accounts (ce->root, n_accounts, accounts);
-  gzclose (file);
+
   return ce;
 }
 
@@ -1458,6 +1074,8 @@ casheph_val_destroy (casheph_val_t *v)
 {
   free (v);
 }
+
+void casheph_slot_destroy (casheph_slot_t *s);
 
 void
 casheph_frame_destroy (casheph_frame_t *f)

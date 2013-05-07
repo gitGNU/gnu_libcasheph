@@ -26,6 +26,12 @@ LT_INIT
 
 AC_CHECK_LIB([z],[gzopen],[],[AC_MSG_ERROR([zlib library not found])])
 
+AC_CHECK_LIB([pthread],[pthread_getspecific],[LIBS="$LIBS -lpthread"],
+             [AC_MSG_ERROR([libmxml library not found])])
+
+AC_CHECK_LIB([mxml],[mxmlLoadFile],[LIBS="$LIBS -lmxml"],
+             [AC_MSG_ERROR([libmxml library not found])])
+
 AC_CONFIG_FILES([
   Makefile
   src/Makefile
