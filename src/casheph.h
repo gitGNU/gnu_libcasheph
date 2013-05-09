@@ -165,29 +165,6 @@ struct casheph_recurrence_s
 
 casheph_t *casheph_open (const char *filename);
 
-/* typedef struct casheph_attribute_s casheph_attribute_t; */
-
-/* struct casheph_attribute_s */
-/* { */
-/*   char *key; */
-/*   char *val; */
-/* }; */
-
-/* typedef struct casheph_tag_s casheph_tag_t; */
-
-/* struct casheph_tag_s */
-/* { */
-/*   char *name; */
-/*   size_t n_attributes; */
-/*   casheph_attribute_t **attributes; */
-/* }; */
-
-/* casheph_tag_t *casheph_parse_tag (gzFile file); */
-
-/* casheph_attribute_t *casheph_parse_attribute (gzFile file); */
-
-/* void casheph_tag_destroy (casheph_tag_t *tag); */
-
 casheph_account_t *casheph_account_get_account_by_name (casheph_account_t *act,
                                                         const char *name);
 
